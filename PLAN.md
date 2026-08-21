@@ -68,6 +68,12 @@ Facts:
 - Data refreshes ~monthly → cache aggressively (see §5 cache table).
 
 ### VERIFY at smoke test (Phase 1, before any UI work)
+0. Refresh token validity FIRST — user flags it may be expired. Test with a
+   bare token-refresh call before anything else. If it fails with
+   invalid_grant, walk the user through minting a new refresh token (same
+   client ID/secret). Note: if the OAuth consent screen is in "Testing" mode,
+   refresh tokens auto-expire after 7 days — check that and recommend
+   switching the app to "In production" for a long-lived token.
 1. Currency of returned micros under this account is INR as expected.
 2. Actual behavior of `average_cpc_micros` (populated for typical keywords? null
    cases?) and units sanity check against Keyword Planner UI for 5 known keywords.
