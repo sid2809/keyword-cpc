@@ -23,13 +23,13 @@ export async function GET() {
   }>(
     `select r.id, r.name, r.tag, r.status, r.processed, r.total_keywords, r.created_at,
             (select case when sum(km.avg_monthly_searches) > 0
-                         then round(sum(km.average_cpc_micros * km.avg_monthly_searches)
+                         then round(sum(km.high_top_micros * km.avg_monthly_searches)
                                     / sum(km.avg_monthly_searches))
-                         else avg(km.average_cpc_micros)
+                         else avg(km.high_top_micros)
                     end
                from keyword_metrics km
               where km.run_id = r.id and km.no_data = false
-                and km.average_cpc_micros is not null) as weighted
+                and km.high_top_micros is not null) as weighted
        from runs r
       order by r.created_at desc
       limit 50`,
@@ -43,7 +43,7 @@ export async function GET() {
     processed: r.processed,
     total: r.total_keywords,
     createdAt: r.created_at.toISOString(),
-    weightedAvgCpcMicros: r.weighted === null ? null : Math.round(Number(r.weighted)),
+    weightedAvgHighTopMicros: r.weighted === null ? null : Math.round(Number(r.weighted)),
   }));
 
   return NextResponse.json({ runs });

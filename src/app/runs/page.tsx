@@ -39,7 +39,7 @@ export default async function RunsPage() {
                   <th className="px-4 py-2 text-xs font-medium text-text-secondary">Tag</th>
                   <th className="px-4 py-2 text-xs font-medium text-text-secondary">Status</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-text-secondary">Keywords</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-text-secondary">Wtd avg CPC</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-text-secondary">Wtd top-of-page</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-text-secondary">Created</th>
                 </tr>
               </thead>
@@ -62,7 +62,7 @@ export default async function RunsPage() {
                     </td>
                     <td className="num px-4 py-2 text-right text-text">{formatInt(run.total)}</td>
                     <td className="num px-4 py-2 text-right text-text">
-                      {formatMicros(run.weightedAvgCpcMicros)}
+                      {formatMicros(run.weightedAvgHighTopMicros)}
                     </td>
                     <td className="px-4 py-2 text-right text-xs text-text-muted">
                       {formatDateTime(run.createdAt)}

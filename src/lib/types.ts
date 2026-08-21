@@ -47,7 +47,17 @@ export type RunSummary = {
   total: number;
   withData: number;
   noData: number;
-  /** Volume-weighted average CPC in micros — the headline number (PLAN.md §1). */
+  /**
+   * PRIMARY: volume-weighted average of the HIGH top-of-page bid, in micros.
+   * The low–high top-of-page band is what an advertiser actually pays to appear
+   * at the top, so it leads the summary, the heat colouring and the histogram.
+   * See VERIFIED.md §7.
+   */
+  weightedAvgHighTopMicros: number | null;
+  medianHighTopMicros: number | null;
+  /** Volume-weighted average of the LOW top-of-page bid — the band's floor. */
+  weightedAvgLowTopMicros: number | null;
+  /** SECONDARY, informational only: volume-weighted average CPC. */
   weightedAvgCpcMicros: number | null;
   medianCpcMicros: number | null;
   totalMonthlyVolume: number;
@@ -69,5 +79,6 @@ export type RunListItem = {
   processed: number;
   total: number;
   createdAt: string;
-  weightedAvgCpcMicros: number | null;
+  /** PRIMARY headline metric: volume-weighted HIGH top-of-page bid. */
+  weightedAvgHighTopMicros: number | null;
 };

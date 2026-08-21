@@ -4,22 +4,23 @@ import { bandColorVar, bandFor, histogram, type HeatBands } from "@/lib/heat";
 import { formatMicros } from "@/lib/format";
 
 /**
- * CPC distribution (PLAN.md §6): "bucket keywords into ₹ bands; clicking a bar
- * filters the table". Bars are coloured by the same heat bands as the CPC
- * column, so the chart and the table agree.
+ * Distribution of the primary metric (PLAN.md §6): "bucket keywords into ₹
+ * bands; clicking a bar filters the table". Bars are coloured by the same heat
+ * bands as the primary column, so the chart and the table agree.
  */
 export function Histogram({
-  cpcs,
+  values,
   bands,
   selected,
   onSelect,
 }: {
-  cpcs: (number | null)[];
+  /** The primary metric's values, in micros — currently high top-of-page bid. */
+  values: (number | null)[];
   bands: HeatBands | null;
   selected: { from: number; to: number } | null;
   onSelect: (range: { from: number; to: number } | null) => void;
 }) {
-  const buckets = histogram(cpcs);
+  const buckets = histogram(values);
   if (buckets.length === 0) return null;
 
   const max = Math.max(...buckets.map((b) => b.count));
@@ -39,7 +40,7 @@ export function Histogram({
               type="button"
               onClick={() => onSelect(isSelected ? null : { from: b.from, to: b.to })}
               title={`${formatMicros(b.from)} – ${formatMicros(b.to)} · ${b.count} keyword${b.count === 1 ? "" : "s"}`}
-              aria-label={`${b.count} keywords between ${formatMicros(b.from)} and ${formatMicros(b.to)}`}
+              aria-label={`${b.count} keyword${b.count === 1 ? "" : "s"} between ${formatMicros(b.from)} and ${formatMicros(b.to)} top-of-page`}
               aria-pressed={isSelected}
               className="group flex h-full flex-1 flex-col justify-end"
             >

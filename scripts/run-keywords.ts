@@ -91,19 +91,21 @@ async function main() {
     console.log(`Run ${run.id}  ${run.status}  ${run.name ?? "(unnamed)"}${run.tag ? `  [${run.tag}]` : ""}`);
     console.log(
       `  ${summary.total} keywords, ${summary.noData} no-data · ` +
-        `weighted avg CPC ${formatMicros(summary.weightedAvgCpcMicros)} · ` +
-        `median ${formatMicros(summary.medianCpcMicros)} · ` +
+        `wtd top-of-page ${formatMicros(summary.weightedAvgHighTopMicros)} ` +
+        `(floor ${formatMicros(summary.weightedAvgLowTopMicros)}) · ` +
+        `median ${formatMicros(summary.medianHighTopMicros)} · ` +
+        `avg CPC ${formatMicros(summary.weightedAvgCpcMicros)} · ` +
         `total volume ${summary.totalMonthlyVolume.toLocaleString("en-IN")}`,
     );
     console.log();
     console.log(
-      `  ${"submitted".padEnd(26)} ${"canonical".padEnd(22)} ${"avg CPC".padStart(11)} ${"low".padStart(10)} ${"high".padStart(11)} ${"volume".padStart(9)}  months`,
+      `  ${"submitted".padEnd(26)} ${"canonical".padEnd(22)} ${"low top".padStart(10)} ${"high top".padStart(11)} ${"avg CPC".padStart(11)} ${"volume".padStart(9)}  months`,
     );
     for (const r of rows) {
       console.log(
         `  ${r.submitted.slice(0, 25).padEnd(26)} ${(r.canonical ?? "—").slice(0, 21).padEnd(22)} ` +
-          `${formatMicros(r.averageCpcMicros).padStart(11)} ${formatMicros(r.lowTopMicros).padStart(10)} ` +
-          `${formatMicros(r.highTopMicros).padStart(11)} ` +
+          `${formatMicros(r.lowTopMicros).padStart(10)} ${formatMicros(r.highTopMicros).padStart(11)} ` +
+          `${formatMicros(r.averageCpcMicros).padStart(11)} ` +
           `${(r.avgMonthlySearches ?? 0).toLocaleString("en-IN").padStart(9)}  ` +
           `${r.monthlyVolumes?.length ?? 0}${r.noData ? "  (no data)" : ""}`,
       );
@@ -175,7 +177,8 @@ async function main() {
   const summary = await getRunSummary(runId);
   console.log(
     `  ${summary.total} keywords, ${summary.noData} no-data · ` +
-      `weighted avg CPC ${formatMicros(summary.weightedAvgCpcMicros)} · median ${formatMicros(summary.medianCpcMicros)}`,
+      `wtd top-of-page ${formatMicros(summary.weightedAvgHighTopMicros)} · ` +
+      `median ${formatMicros(summary.medianHighTopMicros)} · avg CPC ${formatMicros(summary.weightedAvgCpcMicros)}`,
   );
   console.log(`\n  npm run run:keywords -- --show ${runId}`);
 

@@ -18,9 +18,11 @@ import type { DedupMode, ResultRow } from "./types";
 export const EXPORT_COLUMNS = [
   { key: "submitted", label: "Keyword" },
   { key: "canonical", label: "Canonical keyword" },
-  { key: "avgCpc", label: "Avg CPC (₹)" },
+  // The top-of-page band is the primary metric (VERIFIED.md §7); avg CPC
+  // follows it as secondary information.
   { key: "lowTop", label: "Low top-of-page (₹)" },
   { key: "highTop", label: "High top-of-page (₹)" },
+  { key: "avgCpc", label: "Avg CPC (₹, info)" },
   { key: "volume", label: "Avg monthly searches" },
   { key: "competition", label: "Competition" },
   { key: "competitionIndex", label: "Competition index" },
@@ -32,9 +34,9 @@ export type ExportColumnKey = (typeof EXPORT_COLUMNS)[number]["key"];
 
 export const DEFAULT_EXPORT_COLUMNS: ExportColumnKey[] = [
   "submitted",
-  "avgCpc",
   "lowTop",
   "highTop",
+  "avgCpc",
   "volume",
   "competitionIndex",
 ];

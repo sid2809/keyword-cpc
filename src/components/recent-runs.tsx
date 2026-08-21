@@ -31,7 +31,7 @@ export function RecentRuns({ runs }: { runs: RunListItem[] }) {
             </p>
             <div className="mt-2 flex items-center justify-between gap-2">
               <StatusBadge status={run.status} />
-              <span className="num text-text">{formatMicros(run.weightedAvgCpcMicros)}</span>
+              <span className="num text-text" title="Volume-weighted high top-of-page bid">{formatMicros(run.weightedAvgHighTopMicros)}</span>
             </div>
           </Link>
         ))}

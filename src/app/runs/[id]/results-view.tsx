@@ -11,18 +11,18 @@ import { ExportModal } from "./export-modal";
 
 /** Results table, filters and summary — PLAN.md §6 screen 2. */
 
-type ColumnKey = "cpc" | "lowTop" | "highTop" | "volume" | "competition" | "spark";
+type ColumnKey = "lowTop" | "highTop" | "cpc" | "volume" | "competition" | "spark";
 
 const TOGGLEABLE: { key: ColumnKey; label: string }[] = [
-  { key: "cpc", label: "Avg CPC" },
-  { key: "lowTop", label: "Low top" },
-  { key: "highTop", label: "High top" },
+  { key: "lowTop", label: "Low top-of-page" },
+  { key: "highTop", label: "High top-of-page" },
+  { key: "cpc", label: "Avg CPC (info)" },
   { key: "volume", label: "Volume" },
   { key: "competition", label: "Competition" },
   { key: "spark", label: "Trend" },
 ];
 
-type SortKey = "position" | "keyword" | "cpc" | "volume" | "competition";
+type SortKey = "position" | "keyword" | "highTop" | "cpc" | "volume" | "competition";
 
 export function ResultsView({
   runId,
@@ -46,20 +46,25 @@ export function ResultsView({
   const [bucket, setBucket] = useState<{ from: number; to: number } | null>(null);
   const [visible, setVisible] = useState<ColumnKey[]>(TOGGLEABLE.map((c) => c.key));
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
-    key: mode === "intact" ? "position" : "cpc",
+    key: mode === "intact" ? "position" : "highTop",
     dir: mode === "intact" ? "asc" : "desc",
   });
   const [exporting, setExporting] = useState(false);
   const [customBands, setCustomBands] = useState<{ lower: string; upper: string }>({ lower: "", upper: "" });
 
-  // Bands come from the run's own CPC spread unless the user pins absolute ones.
+  /*
+   * PRIMARY METRIC: the low–high top-of-page band. Heat colouring, the
+   * histogram and the summary all key off the HIGH top-of-page bid, because
+   * that is what an advertiser actually pays to appear at the top. Average CPC
+   * is kept as a secondary, informational column. See VERIFIED.md §7.
+   */
   const bands: HeatBands | null = useMemo(() => {
     const lower = Number(customBands.lower);
     const upper = Number(customBands.upper);
     if (customBands.lower !== "" && customBands.upper !== "" && lower > 0 && upper > lower) {
       return { lower: lower * 1_000_000, upper: upper * 1_000_000, custom: true };
     }
-    return tertileBands(rows.map((r) => r.averageCpcMicros));
+    return tertileBands(rows.map((r) => r.highTopMicros));
   }, [rows, customBands]);
 
   const noDataCount = rows.filter((r) => r.noData).length;
@@ -75,12 +80,13 @@ export function ResultsView({
       if (q && !r.submitted.toLowerCase().includes(q)) return false;
       if (competition && r.competition !== competition) return false;
 
-      const cpc = r.averageCpcMicros;
-      // A CPC filter can only be satisfied by a row that has a CPC.
-      if ((min !== null || max !== null || bucket !== null) && cpc === null) return false;
-      if (min !== null && cpc !== null && cpc < min) return false;
-      if (max !== null && cpc !== null && cpc > max) return false;
-      if (bucket !== null && cpc !== null && (cpc < bucket.from || cpc >= bucket.to)) return false;
+      // Filters target the primary metric, so a histogram click and the
+      // min/max boxes agree with what the colours show.
+      const top = r.highTopMicros;
+      if ((min !== null || max !== null || bucket !== null) && top === null) return false;
+      if (min !== null && top !== null && top < min) return false;
+      if (max !== null && top !== null && top > max) return false;
+      if (bucket !== null && top !== null && (top < bucket.from || top >= bucket.to)) return false;
 
       if (minVol !== null && (r.avgMonthlySearches ?? 0) < minVol) return false;
       return true;
@@ -102,6 +108,8 @@ export function ResultsView({
           return ((a.position ?? 0) - (b.position ?? 0)) * dir;
         case "keyword":
           return a.submitted.localeCompare(b.submitted) * dir;
+        case "highTop":
+          return cmpNum(a.highTopMicros, b.highTopMicros);
         case "cpc":
           return cmpNum(a.averageCpcMicros, b.averageCpcMicros);
         case "volume":
@@ -129,7 +137,7 @@ export function ResultsView({
       {/* Summary + histogram */}
       <Card className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-6">
-          <dl className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
+          <dl className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
             {/*
               Summary stats are computed over canonical keywords, not submitted
               rows — weighting by volume across duplicates would double-count.
@@ -138,14 +146,25 @@ export function ResultsView({
             */}
             <Stat label={mode === "intact" ? "Unique keywords" : "Keywords"} value={formatInt(summary.total)} />
             <Stat label="No data" value={formatInt(summary.noData)} />
-            <Stat label="Wtd avg CPC" value={formatMicros(summary.weightedAvgCpcMicros)} accent />
-            <Stat label="Median CPC" value={formatMicros(summary.medianCpcMicros)} />
+            <Stat
+              label="Wtd top-of-page"
+              value={formatMicros(summary.weightedAvgHighTopMicros)}
+              sub={`floor ${formatMicros(summary.weightedAvgLowTopMicros)}`}
+              accent
+            />
+            <Stat label="Median top-of-page" value={formatMicros(summary.medianHighTopMicros)} />
             <Stat label="Monthly volume" value={formatCompact(summary.totalMonthlyVolume)} />
+            <Stat
+              label="Avg CPC (info)"
+              value={formatMicros(summary.weightedAvgCpcMicros)}
+              sub={`median ${formatMicros(summary.medianCpcMicros)}`}
+              muted
+            />
           </dl>
 
           <div className="w-full max-w-sm">
             <Histogram
-              cpcs={rows.map((r) => r.averageCpcMicros)}
+              values={rows.map((r) => r.highTopMicros)}
               bands={bands}
               selected={bucket}
               onSelect={setBucket}
@@ -173,8 +192,8 @@ export function ResultsView({
             />
           </div>
 
-          <NumberFilter label="Min CPC ₹" value={minCpc} onChange={setMinCpc} />
-          <NumberFilter label="Max CPC ₹" value={maxCpc} onChange={setMaxCpc} />
+          <NumberFilter label="Min top-of-page ₹" value={minCpc} onChange={setMinCpc} />
+          <NumberFilter label="Max top-of-page ₹" value={maxCpc} onChange={setMaxCpc} />
           <NumberFilter label="Min volume" value={minVolume} onChange={setMinVolume} width="w-28" />
 
           <div>
@@ -286,9 +305,13 @@ export function ResultsView({
                   <Th onClick={() => toggleSort(mode === "intact" ? "position" : "keyword")}>
                     Keyword{sortArrow(mode === "intact" ? "position" : "keyword")}
                   </Th>
-                  {show("cpc") && <Th numeric onClick={() => toggleSort("cpc")}>Avg CPC{sortArrow("cpc")}</Th>}
-                  {show("lowTop") && <Th numeric>Low top</Th>}
-                  {show("highTop") && <Th numeric>High top</Th>}
+                  {show("lowTop") && <Th numeric>Low top-of-page</Th>}
+                  {show("highTop") && (
+                    <Th numeric onClick={() => toggleSort("highTop")}>High top-of-page{sortArrow("highTop")}</Th>
+                  )}
+                  {show("cpc") && (
+                    <Th numeric muted onClick={() => toggleSort("cpc")}>Avg CPC{sortArrow("cpc")}</Th>
+                  )}
                   {show("volume") && <Th numeric onClick={() => toggleSort("volume")}>Volume{sortArrow("volume")}</Th>}
                   {show("competition") && (
                     <Th numeric onClick={() => toggleSort("competition")}>Comp{sortArrow("competition")}</Th>
@@ -298,7 +321,7 @@ export function ResultsView({
               </thead>
               <tbody>
                 {filtered.map((r, i) => {
-                  const band = bandFor(r.averageCpcMicros, bands);
+                  const band = bandFor(r.highTopMicros, bands);
                   return (
                     <tr
                       key={`${r.submitted}-${r.position ?? i}`}
@@ -317,16 +340,18 @@ export function ResultsView({
                           </span>
                         )}
                       </td>
-                      {show("cpc") && (
-                        <td className="num px-4 py-2 text-right" style={{ color: bandColorVar(band) }}>
-                          {formatMicros(r.averageCpcMicros)}
-                        </td>
-                      )}
                       {show("lowTop") && (
                         <td className="num px-4 py-2 text-right text-text-secondary">{formatMicros(r.lowTopMicros)}</td>
                       )}
                       {show("highTop") && (
-                        <td className="num px-4 py-2 text-right text-text-secondary">{formatMicros(r.highTopMicros)}</td>
+                        <td className="num px-4 py-2 text-right" style={{ color: bandColorVar(band) }}>
+                          {formatMicros(r.highTopMicros)}
+                        </td>
+                      )}
+                      {show("cpc") && (
+                        <td className="num px-4 py-2 text-right text-text-muted">
+                          {formatMicros(r.averageCpcMicros)}
+                        </td>
                       )}
                       {show("volume") && (
                         <td className="num px-4 py-2 text-right text-text">{formatInt(r.avgMonthlySearches)}</td>
@@ -357,11 +382,31 @@ export function ResultsView({
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function Stat({
+  label,
+  value,
+  sub,
+  accent,
+  muted,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: boolean;
+  muted?: boolean;
+}) {
   return (
     <div>
-      <dt className="text-xs text-text-secondary">{label}</dt>
-      <dd className={`num mt-0.5 text-[15px] ${accent ? "font-semibold text-accent" : "text-text"}`}>{value}</dd>
+      <dt className={`text-xs ${muted ? "text-text-muted" : "text-text-secondary"}`}>{label}</dt>
+      <dd
+        className={
+          "num mt-0.5 text-[15px] " +
+          (accent ? "font-semibold text-accent" : muted ? "text-text-secondary" : "text-text")
+        }
+      >
+        {value}
+      </dd>
+      {sub && <dd className="num mt-0.5 text-[11px] text-text-muted">{sub}</dd>}
     </div>
   );
 }
@@ -395,16 +440,19 @@ function NumberFilter({
 function Th({
   children,
   numeric,
+  muted,
   onClick,
 }: {
   children: React.ReactNode;
   numeric?: boolean;
+  muted?: boolean;
   onClick?: () => void;
 }) {
   return (
     <th
       className={
-        "whitespace-nowrap px-4 py-2 text-xs font-medium text-text-secondary " +
+        "whitespace-nowrap px-4 py-2 text-xs font-medium " +
+        (muted ? "text-text-muted " : "text-text-secondary ") +
         (numeric ? "text-right " : "") +
         (onClick ? "cursor-pointer select-none hover:text-accent" : "")
       }

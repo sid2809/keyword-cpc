@@ -104,44 +104,56 @@ export async function getRunSummary(runId: string): Promise<RunSummary> {
     [runId],
   );
 
-  const withData = rows.filter((r) => !r.no_data && r.average_cpc_micros !== null);
+  // "Has data" is judged on the primary metric — the top-of-page band.
+  const withData = rows.filter((r) => !r.no_data && r.high_top_micros !== null);
 
-  let weightedNumerator = 0;
-  let weightTotal = 0;
   let volumeTotal = 0;
-  const cpcs: number[] = [];
+  for (const r of rows) volumeTotal += big(r.avg_monthly_searches) ?? 0;
 
-  for (const r of rows) {
-    const volume = big(r.avg_monthly_searches) ?? 0;
-    volumeTotal += volume;
-    const cpc = big(r.average_cpc_micros);
-    if (cpc === null || r.no_data) continue;
-    cpcs.push(cpc);
-    weightedNumerator += cpc * volume;
-    weightTotal += volume;
+  /**
+   * Volume-weighted mean over rows that actually carry the metric. Falls back
+   * to the unweighted mean when every keyword has zero volume, rather than
+   * dividing by zero and reporting nothing at all.
+   */
+  function weighted(pick: (r: MetricsDbRow) => number | null): number | null {
+    let numerator = 0;
+    let weight = 0;
+    const values: number[] = [];
+    for (const r of rows) {
+      if (r.no_data) continue;
+      const v = pick(r);
+      if (v === null) continue;
+      const volume = big(r.avg_monthly_searches) ?? 0;
+      values.push(v);
+      numerator += v * volume;
+      weight += volume;
+    }
+    if (weight > 0) return Math.round(numerator / weight);
+    if (values.length > 0) return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+    return null;
   }
 
-  cpcs.sort((a, b) => a - b);
-  const median =
-    cpcs.length === 0
-      ? null
-      : cpcs.length % 2 === 1
-        ? cpcs[(cpcs.length - 1) / 2]
-        : Math.round((cpcs[cpcs.length / 2 - 1] + cpcs[cpcs.length / 2]) / 2);
+  function median(pick: (r: MetricsDbRow) => number | null): number | null {
+    const values = rows
+      .filter((r) => !r.no_data)
+      .map(pick)
+      .filter((v): v is number => v !== null)
+      .sort((a, b) => a - b);
+    if (values.length === 0) return null;
+    return values.length % 2 === 1
+      ? values[(values.length - 1) / 2]
+      : Math.round((values[values.length / 2 - 1] + values[values.length / 2]) / 2);
+  }
 
   return {
     total: rows.length,
     withData: withData.length,
     noData: rows.length - withData.length,
-    // Falls back to the unweighted mean when every keyword has zero volume,
-    // rather than dividing by zero and reporting nothing.
-    weightedAvgCpcMicros:
-      weightTotal > 0
-        ? Math.round(weightedNumerator / weightTotal)
-        : cpcs.length > 0
-          ? Math.round(cpcs.reduce((a, b) => a + b, 0) / cpcs.length)
-          : null,
-    medianCpcMicros: median,
+    weightedAvgHighTopMicros: weighted((r) => big(r.high_top_micros)),
+    medianHighTopMicros: median((r) => big(r.high_top_micros)),
+    weightedAvgLowTopMicros: weighted((r) => big(r.low_top_micros)),
+    weightedAvgCpcMicros: weighted((r) => big(r.average_cpc_micros)),
+    medianCpcMicros: median((r) => big(r.average_cpc_micros)),
     totalMonthlyVolume: volumeTotal,
   };
 }

@@ -9,9 +9,9 @@ import type { DedupMode } from "@/lib/types";
 const COLUMNS = [
   { key: "submitted", label: "Keyword" },
   { key: "canonical", label: "Canonical keyword" },
-  { key: "avgCpc", label: "Avg CPC (₹)" },
   { key: "lowTop", label: "Low top-of-page (₹)" },
   { key: "highTop", label: "High top-of-page (₹)" },
+  { key: "avgCpc", label: "Avg CPC (₹, info)" },
   { key: "volume", label: "Avg monthly searches" },
   { key: "competition", label: "Competition" },
   { key: "competitionIndex", label: "Competition index" },
@@ -19,7 +19,7 @@ const COLUMNS = [
   { key: "noData", label: "No-data flag" },
 ] as const;
 
-const DEFAULTS = ["submitted", "avgCpc", "lowTop", "highTop", "volume", "competitionIndex"];
+const DEFAULTS = ["submitted", "lowTop", "highTop", "avgCpc", "volume", "competitionIndex"];
 
 export function ExportModal({
   runId,

@@ -269,3 +269,98 @@ strictly cheaper in both quota and wall-clock. The only argument for smaller
 chunks is progress granularity, and a 10,000-row response is a large JSON
 payload to hold in memory. **Chunking at 5,000** keeps responses reasonable
 while making a 20,000-keyword run tick four times instead of twice.
+
+---
+
+## 7. Does `average_cpc_micros` respond to geo? — ✅ YES, strongly (2026-08-21)
+
+**Tested because it was suspected of ignoring geo.** It does not ignore geo.
+
+Same five keywords, same language (English), network (GOOGLE_SEARCH) and range
+(Aug 2025 – Jul 2026); only `geo_target_constants` changed. Each geo was queried
+twice, interleaved (US, IN, US, IN), so a real difference could be told apart
+from run-to-run noise and from ordering effects. The `metrics_cache` was
+bypassed entirely — these were direct API calls.
+
+| keyword | `average_cpc_micros` US (2840) | India (2356) | ratio |
+|---|---|---|---|
+| gardening tools | 58,540,700 (₹58.54) | 3,190,953 (₹3.19) | 18× |
+| raised garden bed | 123,066,095 (₹123.07) | 5,738,502 (₹5.74) | 21× |
+| indoor plants | 85,288,415 (₹85.29) | 2,876,270 (₹2.88) | 30× |
+| lawn mower | 85,502,160 (₹85.50) | 4,982,228 (₹4.98) | 17× |
+| garden hose | 68,825,054 (₹68.83) | 3,250,689 (₹3.25) | 21× |
+
+Every value differed; every value was **byte-identical on the repeat call** for
+its own geo. Every other field moved with geo too — volume, both top-of-page
+bids, and competition index:
+
+| keyword | volume US → IN | low top US → IN | high top US → IN |
+|---|---|---|---|
+| gardening tools | 60,500 → 27,100 | ₹18.92 → ₹0.77 | ₹112.32 → ₹4.93 |
+| raised garden bed | 165,000 → 3,600 | ₹30.00 → ₹1.69 | ₹227.45 → ₹20.01 |
+| indoor plants | 110,000 → 165,000 | ₹10.60 → ₹0.77 | ₹157.93 → ₹8.66 |
+| lawn mower | 301,000 → 14,800 | ₹17.58 → ₹1.31 | ₹298.98 → ₹10.86 |
+| garden hose | 60,500 → 6,600 | ₹17.33 → ₹1.51 | ₹99.07 → ₹8.88 |
+
+**Verdict: there is no geo defect.** Geo targeting works on every field,
+including `average_cpc_micros`. Note that the account is INR, and the US figures
+are still returned in INR — micros follow the *account's* currency, not the geo's
+(§1). Reproduce with `scratch/geo-probe.ts`.
+
+### The actual `average_cpc_micros` anomalies
+
+Two real oddities remain, neither geo-related:
+
+1. **It is opt-in and fails silently** (§2). Without
+   `historical_metrics_options.include_average_cpc = true` the field is simply
+   absent — no error, no warning, no null. A caller who forgets it gets a
+   complete-looking response with no CPC anywhere.
+2. **It is completely invariant to `year_month_range`** (§3). Across ~30 calls
+   spanning 1-month to 48-month windows it never moved by a single micro. It is
+   not a per-period figure, so it cannot be used to show CPC change over time.
+   The top-of-page bids share this invariance.
+
+Also worth knowing: `average_cpc_micros` sat strictly inside the
+low–high top-of-page band on all ten measurements above, but at no fixed
+position within it (its position ranged from 24% to 63% of the way up the band),
+so it is not derivable from the band.
+
+---
+
+## 8. Decision: the top-of-page band is the primary metric (2026-08-21)
+
+**Decided with the user on 2026-08-21.** The low–high top-of-page bid band —
+specifically **`high_top_of_page_bid_micros`** — is now the primary metric
+throughout the app. `average_cpc_micros` is demoted to a secondary,
+informational column.
+
+**What this changes:**
+
+| Surface | Now keyed off |
+|---|---|
+| Heat colouring (CPC cell + bands) | high top-of-page bid |
+| Histogram buckets and bar colours | high top-of-page bid |
+| Volume-weighted summary figure | high top-of-page bid (with the low bid shown as the band's floor) |
+| Median in the summary | high top-of-page bid |
+| Runs list / recent-runs headline | high top-of-page bid |
+| Min/max filter and histogram click | high top-of-page bid |
+| Default table sort (deduped mode) | high top-of-page bid |
+| Export default column order | low top, high top, then avg CPC |
+
+Average CPC remains available everywhere — a table column (labelled "Avg CPC
+(info)" and rendered muted), a summary tile, and an export column — it simply no
+longer drives colour, buckets or the headline number.
+
+**Why this is defensible on its own terms**, independent of the geo question:
+the top-of-page bids are what an advertiser actually has to bid to appear at the
+top of the page, which is the decision this tool exists to support (repurposing
+PMax page feeds). `average_cpc_micros` is a modelled aggregate whose definition
+Google does not document in the historical-metrics reference, it has to be
+explicitly requested, and it silently disappears when it is not. A band also
+carries more information than a point estimate — the low–high spread shows how
+contested a keyword is.
+
+**Caveat to keep in mind:** the top-of-page bids are invariant to
+`year_month_range` in exactly the same way avg CPC is (§3), so switching the
+primary metric does **not** buy any time-sensitivity. Date-range presets still
+affect the volume series only.
