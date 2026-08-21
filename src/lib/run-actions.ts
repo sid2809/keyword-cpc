@@ -26,6 +26,21 @@ export async function renameRun(runId: string, name: string | null, tag: string 
 }
 
 /**
+ * Resumes a failed or interrupted run from its chunk cursor. Unlike a refresh
+ * this keeps the cache and does NOT snapshot previous values — it is finishing
+ * the original run, not re-asking for fresh numbers.
+ */
+export async function resumeFailedRun(runId: string): Promise<void> {
+  const rows = await query<{ status: string }>("select status from runs where id = $1", [runId]);
+  if (rows.length === 0) throw new Error("Run not found");
+  if (rows[0].status === "running") throw new Error("That run is already going.");
+
+  void executeRun(runId).catch((err) => {
+    console.error(`[runner] resume of ${runId} failed:`, err instanceof Error ? err.message : err);
+  });
+}
+
+/**
  * Re-pulls a finished run from the API and records per-keyword movement.
  *
  * Snapshots the current values into the `prev_*` columns first, then rewinds

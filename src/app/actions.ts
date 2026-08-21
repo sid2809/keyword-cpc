@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { deleteRun, refreshRun, setSavedForever } from "@/lib/run-actions";
+import { deleteRun, refreshRun, resumeFailedRun, setSavedForever } from "@/lib/run-actions";
 import { saveAppSettings } from "@/lib/app-settings";
 import { generateKeywordHistoricalMetrics, getAccountInfo } from "@/lib/google-ads";
 import { DEFAULT_SETTINGS } from "@/lib/run-settings";
@@ -36,6 +36,12 @@ export async function removeRun(runId: string): Promise<void> {
 export async function startRefresh(runId: string): Promise<void> {
   await requireSession();
   await refreshRun(runId);
+  revalidatePath(`/runs/${runId}`);
+}
+
+export async function resumeRun(runId: string): Promise<void> {
+  await requireSession();
+  await resumeFailedRun(runId);
   revalidatePath(`/runs/${runId}`);
 }
 

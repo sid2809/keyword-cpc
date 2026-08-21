@@ -23,6 +23,36 @@
   --heat-red: #b91c1c;
 }
 
+/*
+ * Dark by OS preference, for any render where the inline theme script did not
+ * run. Next serves its own HTML shell for the not-found route — no data-theme
+ * attribute, script not executed — so without this the 404 page rendered light
+ * for a dark-mode user. Guarded with :not([data-theme="light"]) so an explicit
+ * light choice still wins.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+  --bg: #0b1220;
+  --surface: #131e30;
+  --raised: #1e293b;
+  --border: #26344a;
+
+  --text: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-soft: rgb(129 140 248 / 0.12);
+  --on-accent: #0b1220;
+
+  --heat-green: #4ade80;
+  --heat-amber: #fbbf24;
+  --heat-red: #f87171;
+  }
+}
+
+/* An explicit choice always beats the OS preference, so this comes last. */
 [data-theme="dark"] {
   --bg: #0b1220;
   --surface: #131e30;

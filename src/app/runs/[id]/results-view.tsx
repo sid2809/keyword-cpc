@@ -8,6 +8,7 @@ import type { DedupMode, ResultRow, RunSummary } from "@/lib/types";
 import { Histogram, HeatLegend } from "./histogram";
 import { Sparkline } from "./sparkline";
 import { ExportModal } from "./export-modal";
+import { useStoredColumns } from "@/lib/use-stored-columns";
 
 /** Results table, filters and summary — PLAN.md §6 screen 2. */
 
@@ -24,6 +25,8 @@ const TOGGLEABLE: { key: ColumnKey; label: string }[] = [
 ];
 
 type SortKey = "position" | "keyword" | "highTop" | "cpc" | "volume" | "competition";
+
+const VALID_COLUMNS = new Set<ColumnKey>(TOGGLEABLE.map((c) => c.key));
 
 export function ResultsView({
   runId,
@@ -48,8 +51,20 @@ export function ResultsView({
   const [competition, setCompetition] = useState("");
   const [hideNoData, setHideNoData] = useState(false);
   const [bucket, setBucket] = useState<{ from: number; to: number } | null>(null);
-  const [visible, setVisible] = useState<ColumnKey[]>(
-    TOGGLEABLE.map((c) => c.key).filter((k) => k !== "delta" || hasDeltas),
+  const [storedColumns, storeColumns] = useStoredColumns();
+
+  /*
+   * Visible columns come from the user's saved preference, or all of them when
+   * nothing is saved yet. The preference is authoritative — forcing the delta
+   * column on for runs that have deltas would make its checkbox impossible to
+   * untick.
+   */
+  const visible = useMemo<ColumnKey[]>(
+    () =>
+      storedColumns
+        ? storedColumns.filter((k): k is ColumnKey => VALID_COLUMNS.has(k as ColumnKey))
+        : TOGGLEABLE.map((c) => c.key),
+    [storedColumns],
   );
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
     key: mode === "intact" ? "position" : "highTop",
@@ -264,7 +279,9 @@ export function ResultsView({
                   type="checkbox"
                   checked={show(c.key)}
                   onChange={() =>
-                    setVisible((v) => (v.includes(c.key) ? v.filter((k) => k !== c.key) : [...v, c.key]))
+                    storeColumns(
+                      visible.includes(c.key) ? visible.filter((k) => k !== c.key) : [...visible, c.key],
+                    )
                   }
                   className="accent-[var(--accent)]"
                 />

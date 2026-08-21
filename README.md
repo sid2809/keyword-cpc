@@ -8,10 +8,9 @@ Build plan and locked decisions live in [PLAN.md](./PLAN.md). API behaviour that
 was tested against the live endpoint — including three things the plan got wrong
 — is recorded in [VERIFIED.md](./VERIFIED.md).
 
-**Status: Phase 4 complete** — paste or upload keywords, watch progress, filter
-and chart the results, export them, save runs forever, re-pull them to see what
-moved, and edit the defaults. Only Phase 5 polish remains (run comparison,
-sparkline-toggle persistence, Railway deploy notes).
+**Status: all five build phases complete.** Paste or upload keywords, watch
+progress, filter and chart the results, export them, save runs forever, re-pull
+them to see what moved, compare two runs side by side, and edit the defaults.
 
 ## Stack
 
@@ -140,6 +139,7 @@ token with the same client ID/secret.
 | `/` | New Search workbench — Paste \| Upload on the left, all settings on the right |
 | `/runs` | Run history with live progress bars, and a ★ Saved filter |
 | `/runs/[id]` | Results: summary, histogram, filters, table, export, save/refresh/delete |
+| `/compare` | Two runs side by side, matched on Google's canonical keyword |
 | `/settings` | Editable defaults, credential health check, fixed limits |
 
 Under the `LIVE_MODE_THRESHOLD` (2,000 keywords) a run stays on the New Search
@@ -192,6 +192,23 @@ product decision rather than a workaround.
 - **Delete** asks for confirmation, then removes the run and its keywords and
   metrics. `metrics_cache` is left alone: it is shared across runs and keyed by
   keyword, so clearing it would slow every other run down for no benefit.
+
+### Comparing runs
+
+Tick two finished runs on the Runs page and choose **Compare**. Keywords are
+matched on **Google's canonical form**, so a run containing "cars" lines up with
+one containing "car"; matching submitted text would miss that. Keywords present
+in only one run are listed at the bottom rather than dropped, so a shrinking
+list is visible rather than silent.
+
+Comparison is useful across geos (run the same list for US and India), across
+time (compare a saved run with a fresh one), or across settings.
+
+### Column choices
+
+Which columns are shown persists across runs and reloads, in `localStorage`. The
+saved preference is authoritative — including for the Change column — so a
+toggle always does what it says.
 
 ### Settings
 
@@ -284,6 +301,24 @@ src/instrumentation.ts  Boot hook — resumes interrupted runs
 src/proxy.ts         Auth guard (Next 16's renamed middleware)
 ```
 
+### Theming
+
+The theme is applied three ways, deliberately layered:
+
+1. An inline script in the root layout sets `data-theme` before first paint — no
+   flash of the wrong theme on a normal page load.
+2. The stylesheet also honours `prefers-color-scheme`, so a render where that
+   script did not run still gets the right theme.
+3. `ThemeSync` re-applies the stored choice after hydration.
+
+Layers 2 and 3 exist because Next serves its **own HTML shell**
+(`<html id="__next_error__">`) for the not-found and error paths — the root
+layout arrives only in the RSC payload and renders on the client, so the inline
+script never executes and `data-theme` is absent. Without the fallbacks, a user
+who chose dark saw those pages in light. React logs a benign
+"Encountered a script tag while rendering React component" warning on that path
+for the same reason; it is expected, and the theme is correct regardless.
+
 ### Auth model
 
 `src/proxy.ts` does an **optimistic** check only — is a session cookie present?
@@ -315,8 +350,50 @@ numbered file rather than editing an applied one.
 
 ## Deploying to Railway
 
-Not done yet (PLAN.md §9 parks it for v1). Config is 12-factor — every setting is
-an env var, no file-based config — so the move should be: provision a Postgres
-plugin, copy `DATABASE_URL` and the rest of the vars into Railway, and run
-`npm run db:migrate` as a release step. `NODE_ENV=production` automatically marks
-the session cookie `Secure`.
+Nothing in the app reads a file for configuration — every setting is an env var
+— so a deploy is: provision Postgres, copy the vars, run migrations, start.
+
+**1. Provision.** Create a Railway project, add the **Postgres** plugin, and add
+this repo as a service. Railway detects Next.js and runs `npm run build` /
+`npm start`.
+
+**2. Environment.** Copy every variable from `.env.example` into the service.
+`DATABASE_URL` can reference the plugin directly:
+
+```
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+```
+
+Set a fresh `SESSION_SECRET` for production (`openssl rand -base64 36`) rather
+than reusing the local one — rotating it invalidates every outstanding session,
+which is what you want if the local value has ever been shared.
+
+**3. Migrations.** Add a release command so schema changes apply before the new
+version serves traffic:
+
+```
+npm run db:migrate
+```
+
+Migrations are forward-only and tracked in `schema_migrations`, so re-running is
+safe and applies only what is new.
+
+**4. Verify.** Open `/settings` and press **Test API connection**. It reports
+the account currency and a sample price, which catches a mis-copied credential
+immediately.
+
+### Things worth knowing before you deploy
+
+- **`NODE_ENV=production` marks the session cookie `Secure`**, so the app must be
+  served over HTTPS. Railway does this by default.
+- **Runs execute in-process.** A deploy mid-run kills it, but nothing is lost:
+  `runs.chunk_cursor` persists and `src/instrumentation.ts` resumes interrupted
+  runs at boot. Prefer deploying when nothing large is running anyway.
+- **Do not scale beyond one instance.** The 1 rps rate limiter is per-process,
+  so two instances would together exceed Google's limit and earn
+  `RESOURCE_EXHAUSTED`. A second instance would also duplicate boot-time
+  resumes. This is a single-user tool; one instance is the design.
+- **Uploaded sheets are stored in Postgres** (`run_uploads`) so exports can
+  re-attach the user's other columns. A few thousand rows is a few MB — fine,
+  but it is the table that will grow fastest.
+- **Back up before deleting runs.** There is no undo on the delete action.

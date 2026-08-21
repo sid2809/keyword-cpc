@@ -38,7 +38,13 @@ logic on top of it. If something is unknown, say so and ask — never guess sile
   runs taggable with niche/site label (e.g. "ponly gardening").
 - Run summary: **volume-weighted avg CPC** (primary) + median alongside; CPC
   distribution histogram.
+  **SUPERSEDED 2026-08-22:** the primary metric is now the **low–high
+  top-of-page bid band** (specifically the high bid), which drives the summary,
+  heat colouring and histogram; avg CPC is a secondary informational column.
+  Decided with the user after testing that avg CPC *does* respond to geo — see
+  VERIFIED.md §7 and §8.
 - Filters in results: CPC band (min/max), volume, competition index, text search.
+  (The min/max filter targets the top-of-page bid, per the change above.)
 - Single user auth: simple password login (env var) with signed HTTP-only cookie —
   same pattern as user's tracker app. No multi-user.
 - AI niche tagging: **DEFERRED** — do not build now, but keep a nullable
@@ -257,6 +263,12 @@ UI quality bar: clean, fast, keyboard-friendly, obvious empty states, INR
 formatted as ₹1,234.56 (micros ÷ 1,000,000, 2 decimals). No clutter.
 
 ## 7. Build phases (each ends runnable + tested)
+
+> **STATUS: all five phases complete as of 2026-08-22.** Phase 1's VERIFY answers
+> and the corrections they forced are in [VERIFIED.md](./VERIFIED.md); §7–§8 there
+> also record the geo test and the decision to make the top-of-page bid band the
+> primary metric instead of average CPC. Setup, screens and deployment are
+> documented in [README.md](./README.md).
 
 - **Phase 0 — Skeleton**: Next.js + Postgres + login + env plumbing. Ask user for
   all Google Ads env vars; document them in README.
