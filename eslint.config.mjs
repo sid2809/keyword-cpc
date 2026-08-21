@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Raw API transcripts and throwaway probes; gitignored, not part of the app.
+    "scratch/**",
   ]),
 ]);
 

@@ -27,7 +27,10 @@ logic on top of it. If something is unknown, say so and ask — never guess sile
 - Dedup: toggle at top of run setup — "Keep my list intact" (map Google's deduped
   result back to every submitted row) vs "Show deduped only".
 - Date range: default last 12 months; presets for shorter ranges (3/6/12 mo).
-  See VERIFY #3 before promising per-range CPC.
+  **RESOLVED (VERIFY #3):** the range affects the monthly volume series ONLY —
+  CPC and bid aggregates are invariant. Label the presets accordingly; never
+  imply a per-range CPC. Also: the newest month is eventually-consistent, so
+  never assume exactly 12 data points. See VERIFIED.md §3.
 - Sparklines: 12-month volume series shown per keyword, column toggleable on/off.
 - No-data keywords: greyed rows inline, one-click "remove all no-data rows".
 - Export: CSV/XLSX with **column selection** before download.
@@ -60,14 +63,31 @@ Facts:
   `avg_monthly_searches`, `competition`, `competition_index`,
   `low_top_of_page_bid_micros`, `high_top_of_page_bid_micros`,
   `monthly_search_volumes[]` (month, year, searches).
-- Near-exact dedup: "car" and "cars" collapse to one result. The tool must keep a
-  submitted→canonical mapping to support "keep my list intact" mode.
+- **CORRECTION (smoke test 2026-08-21):** `average_cpc_micros` is **opt-in**. It
+  is absent from the response unless
+  `historical_metrics_options.include_average_cpc = true`. Omitting it fails
+  silently — no error, just no CPC. Always send it. See VERIFIED.md §2.
+- **CORRECTION (smoke test 2026-08-21):** a no-data keyword comes back with **no
+  `keyword_metrics` object at all**, not null fields. Test for the key's
+  presence, not for null metrics.
+- Near-exact dedup: "car" and "cars" collapse to one result. Confirmed: the
+  surviving row carries a **`close_variants[]`** field listing the collapsed
+  inputs (`{text: "car", closeVariants: ["cars"]}`), so the API supplies the
+  submitted→canonical mapping directly — "keep my list intact" mode can be built
+  on it rather than on local guesswork.
 - Rate limit: **1 request/second per customer ID** for planning methods (applies
   regardless of access level). Violations → RESOURCE_EXHAUSTED. Build the client
   with a hard 1 rps throttle + exponential backoff retry.
 - Data refreshes ~monthly → cache aggressively (see §5 cache table).
 
 ### VERIFY at smoke test (Phase 1, before any UI work)
+
+> **STATUS: all 6 items closed on 2026-08-21. Answers, evidence and the
+> corrections they forced are in [VERIFIED.md](./VERIFIED.md). Reproduce with
+> `npm run smoke`.** Summary: token valid (consent screen in production);
+> currency INR; `average_cpc_micros` is opt-in; `year_month_range` moves the
+> volume series only; client = direct REST on v25; quota is 15,000 ops/day with
+> 1 op per request, so the 1 rps rate limit binds first.
 0. Refresh token validity FIRST — user flags it may be expired. Test with a
    bare token-refresh call before anything else. If it fails with
    invalid_grant, walk the user through minting a new refresh token (same

@@ -42,3 +42,6 @@ next-env.d.ts
 
 # keep the template committed (the .env* rule above would hide it)
 !.env.example
+
+# raw API transcripts from smoke tests
+/scratch

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "tsx scripts/migrate.ts",
-    "check:token": "tsx scripts/check-token.ts"
+    "check:token": "tsx scripts/check-token.ts",
+    "smoke": "tsx scripts/smoke-test.ts"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
