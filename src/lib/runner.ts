@@ -6,7 +6,10 @@ import {
   MAX_KEYWORDS_PER_REQUEST,
 } from "./google-ads";
 import { chunk, distinctNormalized, type ParsedKeyword } from "./keywords";
-import { settingsHash, withDefaults, type RunSettings } from "./run-settings";
+import { settingsHash, withDefaults } from "./run-settings";
+import type { RunSettings, RunSource, RunStatus } from "./types";
+
+export type { RunSource, RunStatus };
 
 /**
  * In-process run executor. Single user, so no external queue — but runs must
@@ -24,8 +27,6 @@ import { settingsHash, withDefaults, type RunSettings } from "./run-settings";
  */
 export const CHUNK_SIZE = 5_000;
 
-export type RunStatus = "queued" | "running" | "done" | "failed" | "canceled";
-export type RunSource = "paste" | "csv" | "xlsx";
 
 export type RunRow = {
   id: string;

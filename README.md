@@ -4,12 +4,13 @@ Bulk keyword CPC and search-volume research using the Google Ads
 `KeywordPlanIdeaService.GenerateKeywordHistoricalMetrics` endpoint. Single user,
 local-first, Railway-deployable later.
 
-Build plan and locked decisions live in [PLAN.md](./PLAN.md). Verified API facts
-will be recorded in `VERIFIED.md` at the end of Phase 1.
+Build plan and locked decisions live in [PLAN.md](./PLAN.md). API behaviour that
+was tested against the live endpoint — including three things the plan got wrong
+— is recorded in [VERIFIED.md](./VERIFIED.md).
 
-**Status: Phase 2 complete** — app skeleton with login, verified API facts, and
-a working runner (chunking, throttle, cache, dedup mapping, resume). No UI for
-running searches yet; drive it from the CLI until Phase 3.
+**Status: Phase 3 complete** — the app is usable end to end: paste or upload
+keywords, watch progress, then filter, chart and export the results. Run
+history, saved searches, refresh/delta and the settings screen are Phase 4.
 
 ## Stack
 
@@ -18,6 +19,7 @@ running searches yet; drive it from the CLI until Phase 3.
 | Framework | Next.js 16.3 (App Router, Turbopack) + React 19 |
 | Styling | Tailwind CSS v4, design tokens per PLAN.md §5 |
 | Database | PostgreSQL 16 (`pg`, no ORM) |
+| Spreadsheets | `papaparse` (CSV), `read-excel-file` / `write-excel-file` (XLSX) |
 | Auth | Single password + HMAC-signed HTTP-only cookie |
 
 > Next.js 16 renamed the `middleware.ts` convention to **`proxy.ts`**. The auth
@@ -130,9 +132,40 @@ production** (verified 2026-08-21), so its token is long-lived — a failure her
 would instead mean manual revocation or a rotated client secret. Mint a new
 token with the same client ID/secret.
 
+## Screens
+
+| Route | What it is |
+|---|---|
+| `/` | New Search workbench — Paste \| Upload on the left, all settings on the right |
+| `/runs` | Run history with live progress bars |
+| `/runs/[id]` | Results: summary, CPC histogram, filters, table, export |
+| `/settings` | Current configuration (editable in Phase 4) |
+
+Under the `LIVE_MODE_THRESHOLD` (2,000 keywords) a run stays on the New Search
+page with a progress bar; above it the run is submitted and you land on its page,
+which shows the same bar. Either way the run survives leaving the page.
+
+### Notes on the results screen
+
+- **CPC heat bands** default to this run's tertiles, shown in a legend. Type
+  absolute ₹ bounds into "Heat bands" to override them.
+- **Clicking a histogram bar** filters the table to that ₹ bucket. Bars are
+  coloured by their midpoint's band, so a bar spanning a band boundary takes the
+  colour of its middle.
+- **Sparklines** are drawn from whatever months came back, never assuming 12 —
+  the newest month is eventually-consistent (VERIFIED.md §3).
+- **Summary stats** are computed over canonical keywords, not submitted rows, so
+  duplicates don't double-count the volume-weighted average. In "keep my list
+  intact" mode the table therefore shows more rows than the "Unique keywords"
+  figure.
+- **Export** offers column selection and CSV/XLSX. In intact mode it preserves
+  your original row order, and if the run came from an uploaded sheet your other
+  columns are re-attached ahead of the metrics.
+
 ## The runner
 
-Until the Phase 3 UI exists, runs are driven from the CLI:
+Runs can also be driven from the CLI, which is handy for large lists and for
+resuming:
 
 ```bash
 npm run run:keywords -- --keywords "gardening tools,lawn mower" --tag garden
@@ -189,7 +222,7 @@ block startup. The resume proceeds in the background.
 db/migrations/       Numbered .sql files, applied in filename order
 scripts/             CLI tools (migrate, token check, smoke test, runner)
 src/app/             App Router pages and route handlers
-src/components/      Shared UI (header, theme toggle)
+src/components/      Shared UI (header, theme toggle, primitives)
 src/lib/             Server-only modules:
                        env.ts           validated env access
                        db.ts            pg pool
@@ -199,6 +232,11 @@ src/lib/             Server-only modules:
                        run-settings.ts  settings type, defaults, cache hash
                        runner.ts        chunking, cache, dedup, resume
                        results.ts       reading runs back out
+                       spreadsheet.ts   CSV/XLSX parsing for uploads
+                       export.ts        CSV/XLSX generation
+                       heat.ts          CPC bands and histogram buckets
+                       format.ts        ₹ and number formatting (client-safe)
+                       types.ts         types shared with client components
 src/instrumentation.ts  Boot hook — resumes interrupted runs
 src/proxy.ts         Auth guard (Next 16's renamed middleware)
 ```

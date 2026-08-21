@@ -1,28 +1,15 @@
 import "server-only";
 import { query } from "./db";
-import type { MonthlyVolume } from "./google-ads";
-import { withDefaults, type RunSettings } from "./run-settings";
+import { withDefaults } from "./run-settings";
+import type { MonthlyVolume, ResultRow, RunSettings, RunSummary } from "./types";
+
+export type { ResultRow, RunSummary };
 
 /**
  * Reading a completed run back out, in either dedup mode (PLAN.md §1):
  *   - "intact"  — one row per submitted keyword, original order, metrics merged
  *   - "deduped" — one row per canonical keyword
  */
-
-export type ResultRow = {
-  /** What the user typed. Equals `canonical` in deduped mode. */
-  submitted: string;
-  canonical: string | null;
-  position: number | null;
-  averageCpcMicros: number | null;
-  avgMonthlySearches: number | null;
-  competition: string | null;
-  competitionIndex: number | null;
-  lowTopMicros: number | null;
-  highTopMicros: number | null;
-  monthlyVolumes: MonthlyVolume[] | null;
-  noData: boolean;
-};
 
 type MetricsDbRow = {
   canonical_text: string;
@@ -105,16 +92,6 @@ export async function getResults(
   );
 }
 
-export type RunSummary = {
-  total: number;
-  withData: number;
-  noData: number;
-  /** Volume-weighted average CPC in micros — the headline number (PLAN.md §1). */
-  weightedAvgCpcMicros: number | null;
-  medianCpcMicros: number | null;
-  totalMonthlyVolume: number;
-};
-
 /**
  * Summary stats over the canonical (deduped) rows — weighting by volume across
  * duplicated submitted rows would double-count.
@@ -169,11 +146,4 @@ export async function getRunSummary(runId: string): Promise<RunSummary> {
   };
 }
 
-/** ₹1,234.56 — micros ÷ 1,000,000, Indian digit grouping (PLAN.md §5). */
-export function formatMicros(micros: number | null): string {
-  if (micros === null) return "—";
-  return `₹${(micros / 1_000_000).toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+export { formatMicros } from "./format";

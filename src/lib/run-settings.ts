@@ -1,26 +1,13 @@
 import { createHash } from "node:crypto";
+import type { DedupMode, RunSettings } from "./types";
+
+export type { DedupMode, RunSettings };
 
 /**
  * The knobs that define what a run asked Google for. Persisted verbatim in
  * `runs.settings` and hashed into `metrics_cache.settings_hash`, so a cached
  * payload is only reused for an identical question.
  */
-
-export type DedupMode = "intact" | "deduped";
-
-export type RunSettings = {
-  /** Geo target constants, e.g. ["geoTargetConstants/2840"] for the US. */
-  geoTargetConstants: string[];
-  /** Language constant, or null to leave unset. Pinned to English by default. */
-  language: string | null;
-  /** GOOGLE_SEARCH only — the API default of Search+Partners is never what we want. */
-  network: "GOOGLE_SEARCH" | "GOOGLE_SEARCH_AND_PARTNERS";
-  /** Length of the monthly volume series. Does NOT affect CPC (VERIFIED.md §3). */
-  monthsBack: 3 | 6 | 12;
-  includeAdultKeywords: boolean;
-  /** "intact" maps Google's deduped rows back onto every submitted row. */
-  dedupMode: DedupMode;
-};
 
 export const US_GEO = "geoTargetConstants/2840";
 export const ENGLISH = "languageConstants/1000";

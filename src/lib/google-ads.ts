@@ -1,7 +1,9 @@
 import "server-only";
 import { env } from "./env";
-import type { RunSettings } from "./run-settings";
 import { yearMonthRange } from "./run-settings";
+import type { MonthlyVolume, RunSettings } from "./types";
+
+export type { MonthlyVolume };
 
 /**
  * Minimal Google Ads REST client — just the two calls this tool makes.
@@ -27,13 +29,6 @@ export const MAX_KEYWORDS_PER_REQUEST = 10_000;
 const MIN_REQUEST_INTERVAL_MS = 1_100;
 
 // --- response shapes --------------------------------------------------------
-
-export type MonthlyVolume = {
-  year: number;
-  /** 1-12 */
-  month: number;
-  searches: number;
-};
 
 export type KeywordMetrics = {
   averageCpcMicros: number | null;
