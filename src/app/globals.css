@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+/* Design tokens — PLAN.md §5. Values are locked; change them here only. */
+
+:root,
+[data-theme="light"] {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --raised: #ffffff;
+  --border: #e2e8f0;
+
+  --text: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef2ff;
+  --on-accent: #ffffff;
+
+  --heat-green: #15803d;
+  --heat-amber: #b45309;
+  --heat-red: #b91c1c;
+}
+
+[data-theme="dark"] {
+  --bg: #0b1220;
+  --surface: #131e30;
+  --raised: #1e293b;
+  --border: #26344a;
+
+  --text: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-soft: rgb(129 140 248 / 0.12);
+  --on-accent: #0b1220;
+
+  --heat-green: #4ade80;
+  --heat-amber: #fbbf24;
+  --heat-red: #f87171;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-border: var(--border);
+
+  --color-text: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+
+  --color-heat-green: var(--heat-green);
+  --color-heat-amber: var(--heat-amber);
+  --color-heat-red: var(--heat-red);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", monospace;
+
+  /* 8px controls, 12px cards */
+  --radius-control: 8px;
+  --radius-card: 12px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* 150ms ease on hover + theme changes (§5 "Feel"). Excluded from the initial
+   paint so the no-flash theme script doesn't animate. */
+@media (prefers-reduced-motion: no-preference) {
+  body,
+  button,
+  input,
+  a {
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* All numeric columns: monospace, 13px, tabular alignment. */
+.num {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}

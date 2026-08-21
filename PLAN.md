@@ -19,8 +19,8 @@ logic on top of it. If something is unknown, say so and ask — never guess sile
 - Google Ads API: **basic access**, OAuth credentials already exist (user supplies
   developer token, client ID/secret, refresh token, login customer ID, customer ID
   as env vars — request these from the user at setup, do not invent).
-- Geo: **US** (geo target constant 2840) default. Language: ask user whether to pin
-  English (constant 1000) or leave unset — do not assume.
+- Geo: **US** (geo target constant 2840) default. Language: **pin English
+  (constant 1000)** — decided with the user at Phase 0 setup, 2026-08-21.
 - Network: **GOOGLE_SEARCH only** (explicitly set; API default is Search+Partners).
 - Currency: account is INR; API returns micros in account currency (confirmed by
   user's prior tools). Display ₹ formatted values; store raw micros.
