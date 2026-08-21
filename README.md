@@ -7,8 +7,9 @@ local-first, Railway-deployable later.
 Build plan and locked decisions live in [PLAN.md](./PLAN.md). Verified API facts
 will be recorded in `VERIFIED.md` at the end of Phase 1.
 
-**Status: Phase 0 complete** — Next.js app, Postgres schema, password login and
-env plumbing. No Google Ads calls are wired into the app yet.
+**Status: Phase 2 complete** — app skeleton with login, verified API facts, and
+a working runner (chunking, throttle, cache, dedup mapping, resume). No UI for
+running searches yet; drive it from the CLI until Phase 3.
 
 ## Stack
 
@@ -76,6 +77,7 @@ npm run dev          # http://localhost:3000
 | `npm run db:migrate` | Apply pending `db/migrations/*.sql`, each in a transaction |
 | `npm run check:token` | PLAN.md §2 VERIFY 0 — confirm the Google refresh token still works |
 | `npm run smoke` | Phase 1 API smoke test; re-verifies every claim in VERIFIED.md |
+| `npm run run:keywords` | Drive the runner from the CLI (see below) |
 | `npm run scan:secrets` | gitleaks over the staged diff (what the pre-commit hook runs) |
 | `npm run scan:secrets:all` | gitleaks over the full history |
 
@@ -128,14 +130,76 @@ production** (verified 2026-08-21), so its token is long-lived — a failure her
 would instead mean manual revocation or a rotated client secret. Mint a new
 token with the same client ID/secret.
 
+## The runner
+
+Until the Phase 3 UI exists, runs are driven from the CLI:
+
+```bash
+npm run run:keywords -- --keywords "gardening tools,lawn mower" --tag garden
+npm run run:keywords -- --file keywords.txt --name "Q3 audit" --months 3
+npm run run:keywords -- --list
+npm run run:keywords -- --show <run-id> [--mode deduped]
+npm run run:keywords -- --resume <run-id>     # or --resume all
+```
+
+Scripts run with `--conditions=react-server` so the `server-only` marker in
+`src/lib/*` resolves to a no-op instead of throwing outside Next.
+
+### How a run works
+
+1. Every submitted row is stored in `run_keywords` with its position —
+   duplicates and original casing included, so "keep my list intact" mode can
+   replay the user's list exactly.
+2. Distinct normalised keywords, in first-appearance order, are split into
+   chunks of **5,000**. That ordering is deterministic, which is what makes
+   `runs.chunk_cursor` meaningful across a restart.
+3. Each chunk checks `metrics_cache` first. A payload fetched in the current
+   calendar month is reused — Google refreshes this data monthly.
+4. Whatever is left goes to the API in one request, then results are written and
+   `chunk_cursor` advances. A crash mid-run leaves the cursor where it was, so
+   resuming continues rather than restarting.
+
+Chunk size is 5,000 rather than the API's 10,000 ceiling because quota is
+charged **per request, not per keyword** — a bigger chunk is strictly cheaper —
+but a 10,000-row response is a large payload and the progress bar would barely
+move. See VERIFIED.md §6.
+
+### Rate limiting
+
+Planning methods allow **1 request/second per customer ID**. All requests pass
+through a single process-wide queue, so concurrent runs cannot together exceed
+it. The OAuth token is fetched *before* a rate-limit slot is taken — acquiring
+the slot first meant a cold-start token refresh ate ~200ms of the interval and
+pushed real spacing to 895ms, which is what earns `RESOURCE_EXHAUSTED`.
+Concurrent callers share one in-flight token refresh.
+
+Retries use exponential backoff with jitter on 429, 5xx, `RESOURCE_EXHAUSTED`
+and network errors; a 401 drops the cached token and retries once.
+
+### Resume on restart
+
+`src/instrumentation.ts` runs at boot and picks up any run left `running` or
+`queued`. It is deliberately **not** awaited — Next's `register` must finish
+before the server accepts requests, so a large interrupted run would otherwise
+block startup. The resume proceeds in the background.
+
 ## Layout
 
 ```
 db/migrations/       Numbered .sql files, applied in filename order
-scripts/             One-off CLI tools (migrate, token check)
+scripts/             CLI tools (migrate, token check, smoke test, runner)
 src/app/             App Router pages and route handlers
 src/components/      Shared UI (header, theme toggle)
-src/lib/             env, db pool, session — all server-only
+src/lib/             Server-only modules:
+                       env.ts           validated env access
+                       db.ts            pg pool
+                       session.ts       password + signed cookie
+                       google-ads.ts    REST client, throttle, retry
+                       keywords.ts      parsing and normalisation
+                       run-settings.ts  settings type, defaults, cache hash
+                       runner.ts        chunking, cache, dedup, resume
+                       results.ts       reading runs back out
+src/instrumentation.ts  Boot hook — resumes interrupted runs
 src/proxy.ts         Auth guard (Next 16's renamed middleware)
 ```
 

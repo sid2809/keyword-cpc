@@ -209,5 +209,63 @@ wall-clock (1 rps) and buy only progress granularity. A 100,000-keyword run
 takes ~10s at 10k chunks but ~100s at 1k chunks. Suggest chunking at **5,000** —
 still fast, but a progress bar that moves more than twice.
 
-> **Not independently verified:** the 10,000 keywords/request ceiling is from
-> the docs, not tested here. Worth probing before relying on it in Phase 2.
+---
+
+## 6. Request limits and dedup semantics — ✅ tested (2026-08-21)
+
+Probed directly before building the Phase 2 runner, since chunking and the
+submitted→canonical mapping both depend on these.
+
+### 10,000 keywords/request is a hard ceiling
+
+| keywords sent | result |
+|---|---|
+| 10,000 | HTTP 200, **10,000 rows** returned |
+| 10,001 | HTTP 400 `keywordPlanIdeaError: INVALID_VALUE` |
+| 20,000 | HTTP 400 `keywordPlanIdeaError: INVALID_VALUE` |
+
+The docs' figure is exact, and the error is a generic `INVALID_VALUE` with no
+hint about the count — so the runner must enforce the cap itself rather than
+rely on a helpful error.
+
+### Every submitted keyword is accounted for
+
+A 5-keyword request containing a nonsense phrase and a `car`/`cars` pair
+returned 4 rows, and **all 5 inputs were recoverable** — each appeared either as
+a row's `text` or inside some row's `close_variants[]`. The 10,000 synthetic
+no-data keywords likewise came back as 10,000 rows.
+
+So the mapping is total: `submitted → canonical` can be built as
+`row.text ∪ row.closeVariants → row.text`, with no submitted keyword left
+unexplained. (The runner still marks any unmatched input as no-data rather than
+trusting this absolutely.)
+
+### Casing collapses, duplicates are silently ignored
+
+Submitting `["gardening tools", "Gardening Tools", "GARDENING TOOLS",
+"gardening tools", "garden hose"]` returned **2 rows**:
+
+```json
+{ "text": "gardening tools",
+  "closeVariants": ["Gardening Tools", "GARDENING TOOLS", "gardening tools"] }
+{ "text": "garden hose" }
+```
+
+Three things follow:
+
+1. Case variants collapse into one canonical row — matching the plan's
+   "lowercase for canonical comparison, preserve original casing in
+   `submitted_text`" decision.
+2. `close_variants` includes the input that *became* `text`, so the union above
+   is the right way to read it, not a set difference.
+3. Duplicate inputs in a single request do **not** error; they are silently
+   deduped. The runner still de-duplicates before sending, to avoid wasting
+   room under the 10,000 cap.
+
+### Chunk size
+
+Since quota is charged per request and not per keyword (§5), a larger chunk is
+strictly cheaper in both quota and wall-clock. The only argument for smaller
+chunks is progress granularity, and a 10,000-row response is a large JSON
+payload to hold in memory. **Chunking at 5,000** keeps responses reasonable
+while making a 20,000-keyword run tick four times instead of twice.
