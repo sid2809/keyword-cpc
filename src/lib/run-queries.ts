@@ -31,6 +31,7 @@ type Row = {
   processed: number;
   total_keywords: number;
   created_at: Date;
+  saved_forever: boolean;
   weighted: string | null;
 };
 
@@ -44,13 +45,17 @@ function toItem(r: Row): RunListItem {
     total: r.total_keywords,
     createdAt: r.created_at.toISOString(),
     weightedAvgHighTopMicros: r.weighted === null ? null : Math.round(Number(r.weighted)),
+    savedForever: r.saved_forever,
   };
 }
 
-export async function listRuns(limit = 50): Promise<RunListItem[]> {
+export async function listRuns(limit = 50, savedOnly = false): Promise<RunListItem[]> {
   const rows = await query<Row>(
-    `select r.id, r.name, r.tag, r.status, r.processed, r.total_keywords, r.created_at, ${WEIGHTED_HIGH_TOP}
-       from runs r order by r.created_at desc limit $1`,
+    `select r.id, r.name, r.tag, r.status, r.processed, r.total_keywords, r.created_at,
+            r.saved_forever, ${WEIGHTED_HIGH_TOP}
+       from runs r
+      ${savedOnly ? "where r.saved_forever = true" : ""}
+      order by r.created_at desc limit $1`,
     [limit],
   );
   return rows.map(toItem);

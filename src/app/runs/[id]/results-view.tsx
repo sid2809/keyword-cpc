@@ -11,11 +11,12 @@ import { ExportModal } from "./export-modal";
 
 /** Results table, filters and summary — PLAN.md §6 screen 2. */
 
-type ColumnKey = "lowTop" | "highTop" | "cpc" | "volume" | "competition" | "spark";
+type ColumnKey = "lowTop" | "highTop" | "delta" | "cpc" | "volume" | "competition" | "spark";
 
 const TOGGLEABLE: { key: ColumnKey; label: string }[] = [
   { key: "lowTop", label: "Low top-of-page" },
   { key: "highTop", label: "High top-of-page" },
+  { key: "delta", label: "Change" },
   { key: "cpc", label: "Avg CPC (info)" },
   { key: "volume", label: "Volume" },
   { key: "competition", label: "Competition" },
@@ -30,12 +31,15 @@ export function ResultsView({
   summary,
   mode,
   hasUpload,
+  hasDeltas,
 }: {
   runId: string;
   rows: ResultRow[];
   summary: RunSummary;
   mode: DedupMode;
   hasUpload: boolean;
+  /** True once this run has been refreshed at least once. */
+  hasDeltas: boolean;
 }) {
   const [text, setText] = useState("");
   const [minCpc, setMinCpc] = useState("");
@@ -44,7 +48,9 @@ export function ResultsView({
   const [competition, setCompetition] = useState("");
   const [hideNoData, setHideNoData] = useState(false);
   const [bucket, setBucket] = useState<{ from: number; to: number } | null>(null);
-  const [visible, setVisible] = useState<ColumnKey[]>(TOGGLEABLE.map((c) => c.key));
+  const [visible, setVisible] = useState<ColumnKey[]>(
+    TOGGLEABLE.map((c) => c.key).filter((k) => k !== "delta" || hasDeltas),
+  );
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
     key: mode === "intact" ? "position" : "highTop",
     dir: mode === "intact" ? "asc" : "desc",
@@ -252,7 +258,7 @@ export function ResultsView({
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-xs font-medium text-text-secondary">Columns</span>
-            {TOGGLEABLE.map((c) => (
+            {TOGGLEABLE.filter((c) => c.key !== "delta" || hasDeltas).map((c) => (
               <label key={c.key} className="flex items-center gap-1.5 text-xs text-text-secondary">
                 <input
                   type="checkbox"
@@ -309,6 +315,7 @@ export function ResultsView({
                   {show("highTop") && (
                     <Th numeric onClick={() => toggleSort("highTop")}>High top-of-page{sortArrow("highTop")}</Th>
                   )}
+                  {hasDeltas && show("delta") && <Th numeric>Change</Th>}
                   {show("cpc") && (
                     <Th numeric muted onClick={() => toggleSort("cpc")}>Avg CPC{sortArrow("cpc")}</Th>
                   )}
@@ -348,6 +355,11 @@ export function ResultsView({
                           {formatMicros(r.highTopMicros)}
                         </td>
                       )}
+                      {hasDeltas && show("delta") && (
+                        <td className="num px-4 py-2 text-right">
+                          <Delta current={r.highTopMicros} previous={r.prevHighTopMicros} />
+                        </td>
+                      )}
                       {show("cpc") && (
                         <td className="num px-4 py-2 text-right text-text-muted">
                           {formatMicros(r.averageCpcMicros)}
@@ -379,6 +391,22 @@ export function ResultsView({
         <ExportModal runId={runId} mode={mode} hasUpload={hasUpload} onClose={() => setExporting(false)} />
       )}
     </div>
+  );
+}
+
+/**
+ * Movement in the primary metric since the previous pull. A rise in what you
+ * must bid is shown red and a fall green — this is a cost, not a score.
+ */
+function Delta({ current, previous }: { current: number | null; previous: number | null }) {
+  if (current === null || previous === null) return <span className="text-text-muted">—</span>;
+  const diff = current - previous;
+  if (diff === 0) return <span className="text-text-muted">no change</span>;
+  const up = diff > 0;
+  return (
+    <span style={{ color: up ? "var(--heat-red)" : "var(--heat-green)" }}>
+      {up ? "↑" : "↓"} {formatMicros(Math.abs(diff))}
+    </span>
   );
 }
 

@@ -10,6 +10,7 @@ import { withDefaults } from "@/lib/run-settings";
 import { formatDateTime } from "@/lib/format";
 import { ResultsView } from "./results-view";
 import { LiveProgress } from "./live-progress";
+import { RunActions } from "./run-actions";
 
 /** Results for one run — PLAN.md §6 screen 2. */
 export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
@@ -48,9 +49,17 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
               {settings.monthsBack}-month history
             </p>
           </div>
-          <Link href="/runs" className="text-xs font-medium text-accent hover:underline">
-            All runs
-          </Link>
+          <div className="flex flex-col items-end gap-2">
+            <RunActions
+              runId={run.id}
+              savedForever={run.saved_forever}
+              canRefresh={run.status === "done" || run.status === "failed"}
+              refreshedAt={run.refreshed_at ? run.refreshed_at.toISOString() : null}
+            />
+            <Link href="/runs" className="text-xs font-medium text-accent hover:underline">
+              All runs
+            </Link>
+          </div>
         </div>
 
         {finished && summary ? (
@@ -60,6 +69,7 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
             summary={summary}
             mode={settings.dedupMode}
             hasUpload={Number(uploadRows[0]?.n ?? 0) > 0}
+            hasDeltas={run.refresh_count > 0}
           />
         ) : run.status === "failed" ? (
           <Card className="p-6">

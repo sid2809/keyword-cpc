@@ -41,6 +41,14 @@ export type ResultRow = {
   highTopMicros: number | null;
   monthlyVolumes: MonthlyVolume[] | null;
   noData: boolean;
+  /**
+   * Values from the pull before the most recent refresh, or null if this run
+   * has never been refreshed. Used for the ↑/↓ delta column (PLAN.md §6).
+   */
+  prevHighTopMicros: number | null;
+  prevLowTopMicros: number | null;
+  prevAverageCpcMicros: number | null;
+  prevAvgMonthlySearches: number | null;
 };
 
 export type RunSummary = {
@@ -81,4 +89,5 @@ export type RunListItem = {
   createdAt: string;
   /** PRIMARY headline metric: volume-weighted HIGH top-of-page bid. */
   weightedAvgHighTopMicros: number | null;
+  savedForever: boolean;
 };

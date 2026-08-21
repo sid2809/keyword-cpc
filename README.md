@@ -8,9 +8,10 @@ Build plan and locked decisions live in [PLAN.md](./PLAN.md). API behaviour that
 was tested against the live endpoint — including three things the plan got wrong
 — is recorded in [VERIFIED.md](./VERIFIED.md).
 
-**Status: Phase 3 complete** — the app is usable end to end: paste or upload
-keywords, watch progress, then filter, chart and export the results. Run
-history, saved searches, refresh/delta and the settings screen are Phase 4.
+**Status: Phase 4 complete** — paste or upload keywords, watch progress, filter
+and chart the results, export them, save runs forever, re-pull them to see what
+moved, and edit the defaults. Only Phase 5 polish remains (run comparison,
+sparkline-toggle persistence, Railway deploy notes).
 
 ## Stack
 
@@ -137,17 +138,31 @@ token with the same client ID/secret.
 | Route | What it is |
 |---|---|
 | `/` | New Search workbench — Paste \| Upload on the left, all settings on the right |
-| `/runs` | Run history with live progress bars |
-| `/runs/[id]` | Results: summary, CPC histogram, filters, table, export |
-| `/settings` | Current configuration (editable in Phase 4) |
+| `/runs` | Run history with live progress bars, and a ★ Saved filter |
+| `/runs/[id]` | Results: summary, histogram, filters, table, export, save/refresh/delete |
+| `/settings` | Editable defaults, credential health check, fixed limits |
 
 Under the `LIVE_MODE_THRESHOLD` (2,000 keywords) a run stays on the New Search
 page with a progress bar; above it the run is submitted and you land on its page,
 which shows the same bar. Either way the run survives leaving the page.
 
+### The primary metric
+
+The **low–high top-of-page bid band** is the primary metric, not average CPC.
+It is what an advertiser must bid to appear at the top of the page, which is the
+decision this tool exists to support. The **high top-of-page bid** drives heat
+colouring, the histogram, the volume-weighted summary, the runs-list headline,
+the filters and the default sort.
+
+`average_cpc_micros` is kept everywhere as a secondary, informational column —
+it is an undocumented modelled aggregate that must be explicitly requested and
+vanishes silently when it is not. See VERIFIED.md §7 and §8, which also record
+that avg CPC *does* respond to geo (US vs India differed 17–30×), so this is a
+product decision rather than a workaround.
+
 ### Notes on the results screen
 
-- **CPC heat bands** default to this run's tertiles, shown in a legend. Type
+- **Heat bands** default to this run's tertiles, shown in a legend. Type
   absolute ₹ bounds into "Heat bands" to override them.
 - **Clicking a histogram bar** filters the table to that ₹ bucket. Bars are
   coloured by their midpoint's band, so a bar spanning a band boundary takes the
@@ -161,6 +176,34 @@ which shows the same bar. Either way the run survives leaving the page.
 - **Export** offers column selection and CSV/XLSX. In intact mode it preserves
   your original row order, and if the run came from an uploaded sheet your other
   columns are re-attached ahead of the metrics.
+
+### Saving, refreshing and deleting
+
+- **★ Save forever** exempts a run from any future cleanup and adds it to the
+  `★ Saved` filter on the Runs page.
+- **Refresh** re-pulls the run from Google and adds a **Change** column showing
+  per-keyword movement in the top-of-page bid since the previous pull — a rise
+  in red (it costs more now), a fall in green. It deliberately **bypasses the
+  monthly cache**, because serving the cached payload back would make every
+  delta zero. The bypass is stored on the run, so a refresh interrupted by a
+  restart resumes as a refresh.
+  Google refreshes this data roughly monthly, so same-day refreshes usually
+  report "no change" — that is the data, not a bug.
+- **Delete** asks for confirmation, then removes the run and its keywords and
+  metrics. `metrics_cache` is left alone: it is shared across runs and keyed by
+  keyword, so clearing it would slow every other run down for no benefit.
+
+### Settings
+
+Defaults for location, language and the live-mode threshold are stored in a
+single-row `app_settings` table and pre-fill the New Search panel; any run can
+still override them. Env vars remain the fallback for anything unset, so a
+fresh database behaves identically.
+
+**Test API connection** runs a live 3-keyword probe and reports the account
+currency and a sample price — worth using before a large run, since it surfaces
+a credential or quota problem immediately rather than halfway through.
+It costs one API operation.
 
 ## The runner
 

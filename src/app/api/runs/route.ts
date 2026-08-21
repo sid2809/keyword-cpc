@@ -19,9 +19,10 @@ export async function GET() {
     processed: number;
     total_keywords: number;
     created_at: Date;
+    saved_forever: boolean;
     weighted: string | null;
   }>(
-    `select r.id, r.name, r.tag, r.status, r.processed, r.total_keywords, r.created_at,
+    `select r.id, r.name, r.tag, r.status, r.processed, r.total_keywords, r.created_at, r.saved_forever,
             (select case when sum(km.avg_monthly_searches) > 0
                          then round(sum(km.high_top_micros * km.avg_monthly_searches)
                                     / sum(km.avg_monthly_searches))
@@ -44,6 +45,7 @@ export async function GET() {
     total: r.total_keywords,
     createdAt: r.created_at.toISOString(),
     weightedAvgHighTopMicros: r.weighted === null ? null : Math.round(Number(r.weighted)),
+    savedForever: r.saved_forever,
   }));
 
   return NextResponse.json({ runs });

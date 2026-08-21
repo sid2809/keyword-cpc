@@ -21,6 +21,10 @@ type MetricsDbRow = {
   high_top_micros: string | null;
   monthly_volumes: MonthlyVolume[] | null;
   no_data: boolean;
+  prev_average_cpc_micros: string | null;
+  prev_avg_monthly_searches: string | null;
+  prev_low_top_micros: string | null;
+  prev_high_top_micros: string | null;
 };
 
 /** pg returns bigint as string to avoid precision loss; these fit in a double. */
@@ -42,6 +46,10 @@ function toRow(submitted: string, position: number | null, m: MetricsDbRow | und
       highTopMicros: null,
       monthlyVolumes: null,
       noData: true,
+      prevHighTopMicros: null,
+      prevLowTopMicros: null,
+      prevAverageCpcMicros: null,
+      prevAvgMonthlySearches: null,
     };
   }
   return {
@@ -56,6 +64,10 @@ function toRow(submitted: string, position: number | null, m: MetricsDbRow | und
     highTopMicros: big(m.high_top_micros),
     monthlyVolumes: m.monthly_volumes,
     noData: m.no_data,
+    prevHighTopMicros: big(m.prev_high_top_micros),
+    prevLowTopMicros: big(m.prev_low_top_micros),
+    prevAverageCpcMicros: big(m.prev_average_cpc_micros),
+    prevAvgMonthlySearches: big(m.prev_avg_monthly_searches),
   };
 }
 
@@ -69,7 +81,9 @@ export async function getResults(
 
   const metrics = await query<MetricsDbRow>(
     `select canonical_text, average_cpc_micros, avg_monthly_searches, competition,
-            competition_index, low_top_micros, high_top_micros, monthly_volumes, no_data
+            competition_index, low_top_micros, high_top_micros, monthly_volumes, no_data,
+            prev_average_cpc_micros, prev_avg_monthly_searches,
+            prev_low_top_micros, prev_high_top_micros
        from keyword_metrics where run_id = $1`,
     [runId],
   );
@@ -99,7 +113,9 @@ export async function getResults(
 export async function getRunSummary(runId: string): Promise<RunSummary> {
   const rows = await query<MetricsDbRow>(
     `select canonical_text, average_cpc_micros, avg_monthly_searches, competition,
-            competition_index, low_top_micros, high_top_micros, monthly_volumes, no_data
+            competition_index, low_top_micros, high_top_micros, monthly_volumes, no_data,
+            prev_average_cpc_micros, prev_avg_monthly_searches,
+            prev_low_top_micros, prev_high_top_micros
        from keyword_metrics where run_id = $1`,
     [runId],
   );

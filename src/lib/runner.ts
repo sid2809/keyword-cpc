@@ -41,6 +41,9 @@ export type RunRow = {
   chunk_cursor: number;
   saved_forever: boolean;
   error: string | null;
+  bypass_cache: boolean;
+  refreshed_at: Date | null;
+  refresh_count: number;
 };
 
 // --- creating a run ---------------------------------------------------------
@@ -152,8 +155,10 @@ export async function executeRun(
       const batch = chunks[i];
 
       // Cache first — Google refreshes this data monthly, so a payload fetched
-      // in the current calendar month is still current.
-      const cached = await readCache(batch, hash);
+      // in the current calendar month is still current. A refresh sets
+      // bypass_cache, because re-serving the cached payload would make every
+      // delta zero and the whole action pointless.
+      const cached = run.bypass_cache ? new Map<string, HistoricalResult>() : await readCache(batch, hash);
       const missing = batch.filter((k) => !cached.has(k));
 
       let fetched: HistoricalResult[] = [];
@@ -191,7 +196,10 @@ export async function executeRun(
     }
 
     await query(
-      "update runs set status = 'done', processed = total_keywords, updated_at = now() where id = $1",
+      `update runs
+          set status = 'done', processed = total_keywords, bypass_cache = false,
+              updated_at = now()
+        where id = $1`,
       [runId],
     );
   } catch (err) {

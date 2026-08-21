@@ -24,6 +24,7 @@ export function RecentRuns({ runs }: { runs: RunListItem[] }) {
             className="rounded-[var(--radius-card)] border border-border bg-surface p-3 hover:border-accent"
           >
             <p className="truncate text-sm font-medium text-text">
+              {run.savedForever && <span className="mr-1 text-heat-amber" aria-label="Saved forever">★</span>}
               {run.name ?? `Run ${run.id.slice(0, 8)}`}
             </p>
             <p className="mt-0.5 truncate text-xs text-text-muted">
