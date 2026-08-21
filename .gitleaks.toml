@@ -1,0 +1,64 @@
+# gitleaks config for keyword-cpc.
+#
+# This repo is PUBLIC, so the pre-commit hook (.githooks/pre-commit) blocks any
+# commit that trips a rule below. Extends the upstream default ruleset — which
+# already covers Google OAuth client secrets, API keys, AWS keys, private keys
+# and friends — and adds rules for the identifiers specific to this project.
+#
+# Run manually:
+#   npm run scan:secrets        # staged changes only (what the hook runs)
+#   npm run scan:secrets:all    # full history
+
+[extend]
+useDefault = true
+
+# --- Google Ads OAuth refresh tokens -----------------------------------------
+# Installed-app refresh tokens start with "1//" followed by a long opaque blob.
+# The upstream ruleset does not cover this shape.
+[[rules]]
+id = "google-oauth-refresh-token"
+description = "Google OAuth refresh token"
+regex = '''1//[0-9A-Za-z_-]{30,}'''
+keywords = ["1//"]
+
+# --- Google Ads developer token ----------------------------------------------
+# 22-char base64-ish token. Matched only when it appears near a naming hint, so
+# random 22-char strings in prose don't trip the hook.
+[[rules]]
+id = "google-ads-developer-token"
+description = "Google Ads developer token"
+regex = '''(?i)(?:developer[_-]?token)["'\s:=]{1,10}([0-9A-Za-z_-]{22})'''
+secretGroup = 1
+keywords = ["developer_token", "developer-token", "developertoken"]
+
+# --- Google Ads account identifiers ------------------------------------------
+# Not credentials, but they tie this public repo to a real Ads account, so keep
+# them out of committed docs and code. 10 digits, optionally XXX-XXX-XXXX.
+[[rules]]
+id = "google-ads-customer-id"
+description = "Google Ads customer/login-customer ID (redact in a public repo)"
+regex = '''(?i)(?:customer[_-]?id|login[_-]?customer[_-]?id|\bCID\b)["'\s:=]{1,10}([0-9]{3}-?[0-9]{3}-?[0-9]{4})'''
+secretGroup = 1
+keywords = ["customer_id", "customer-id", "customerid", "cid"]
+
+[allowlist]
+description = "Paths and placeholders that are safe by construction"
+
+paths = [
+  # The template carries empty keys and instructions, never values.
+  '''\.env\.example$''',
+  # Raw API transcripts from smoke tests. Gitignored, never committed; listed
+  # so a manual full-directory scan doesn't drown in noise.
+  '''^scratch/''',
+  '''^node_modules/''',
+  '''package-lock\.json$''',
+]
+
+regexes = [
+  # Documentation placeholders.
+  '''<redacted>''',
+  '''REDACTED''',
+  '''your-.*-here''',
+  # The env var NAMES are fine to write down; only values are secret.
+  '''GOOGLE_ADS_(DEVELOPER_TOKEN|CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN|LOGIN_CUSTOMER_ID|CUSTOMER_ID)=\s*$''',
+]

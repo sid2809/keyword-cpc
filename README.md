@@ -75,6 +75,49 @@ npm run dev          # http://localhost:3000
 | `npm run lint` | ESLint |
 | `npm run db:migrate` | Apply pending `db/migrations/*.sql`, each in a transaction |
 | `npm run check:token` | PLAN.md §2 VERIFY 0 — confirm the Google refresh token still works |
+| `npm run smoke` | Phase 1 API smoke test; re-verifies every claim in VERIFIED.md |
+| `npm run scan:secrets` | gitleaks over the staged diff (what the pre-commit hook runs) |
+| `npm run scan:secrets:all` | gitleaks over the full history |
+
+## Secret scanning
+
+**This repository is public.** A committed credential is public the moment it is
+pushed, so commits are gated by a [gitleaks](https://github.com/gitleaks/gitleaks)
+pre-commit hook.
+
+```bash
+brew install gitleaks     # required — the hook fails closed without it
+npm install               # prepare script points core.hooksPath at .githooks
+```
+
+`npm install` runs `git config core.hooksPath .githooks`, so the hook is active
+after a normal setup. To enable it by hand:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Rules live in `.gitleaks.toml`, which extends the upstream default set (Google
+OAuth secrets, API keys, private keys, …) and adds three project-specific ones:
+
+| Rule | Catches |
+|---|---|
+| `google-oauth-refresh-token` | `1//…` installed-app refresh tokens |
+| `google-ads-developer-token` | a 22-char token next to a `developer_token` hint |
+| `google-ads-customer-id` | 10-digit Ads account IDs near a `customer_id` hint |
+
+The customer-ID rule is not about secrecy — an account ID is not a credential —
+but it ties this public repo to a real Google Ads account. **Keep account
+identifiers out of committed docs**; write `<redacted>` and point at the env var
+instead. `VERIFIED.md` follows this convention.
+
+Verified behaviour: the hook blocks a planted refresh token, developer token and
+customer ID, blocks `git add -f .env`, and allows content using `<redacted>`.
+Findings are printed with `--redact`, so the secret never reaches terminal
+scrollback.
+
+If a finding is a genuine false positive, add it to `[allowlist]` in
+`.gitleaks.toml` rather than committing with `--no-verify`.
 
 ### Refresh tokens expire
 

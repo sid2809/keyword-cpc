@@ -1,0 +1,30 @@
+#!/bin/sh
+#
+# Blocks commits containing secrets. This repo is public, so a leaked
+# credential is public the moment it is pushed.
+#
+# Enabled by `npm install` (the prepare script points core.hooksPath here), or
+# manually with: git config core.hooksPath .githooks
+#
+# Bypass with `git commit --no-verify` only if you are certain the finding is a
+# false positive — and add it to the allowlist in .gitleaks.toml instead.
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks is not installed — cannot scan for secrets."
+  echo "            install it with:  brew install gitleaks"
+  echo "            or skip this once with:  git commit --no-verify"
+  exit 1
+fi
+
+# --staged scans the diff about to be committed. --redact keeps the secret
+# itself out of terminal scrollback and CI logs.
+if ! gitleaks git --staged --redact --no-banner --config .gitleaks.toml; then
+  echo
+  echo "pre-commit: BLOCKED — the staged changes look like they contain a secret."
+  echo
+  echo "  If it is real:  unstage it, rotate the credential, and move the value"
+  echo "                  into .env (which is gitignored)."
+  echo "  If it is not:   add an entry to [allowlist] in .gitleaks.toml."
+  echo
+  exit 1
+fi

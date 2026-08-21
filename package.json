@@ -9,7 +9,10 @@
     "lint": "eslint",
     "db:migrate": "tsx scripts/migrate.ts",
     "check:token": "tsx scripts/check-token.ts",
-    "smoke": "tsx scripts/smoke-test.ts"
+    "smoke": "tsx scripts/smoke-test.ts",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "scan:secrets": "gitleaks git --staged --redact --no-banner --config .gitleaks.toml",
+    "scan:secrets:all": "gitleaks git --redact --no-banner --config .gitleaks.toml"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
