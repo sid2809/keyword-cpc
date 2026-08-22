@@ -26,15 +26,21 @@ export function ExportModal({
   mode,
   hasUpload,
   onClose,
+  selection,
 }: {
   runId: string;
   mode: DedupMode;
   hasUpload: boolean;
   onClose: () => void;
+  /** Row keys to export. Undefined exports every row. */
+  selection?: string[];
 }) {
   const [selected, setSelected] = useState<string[]>(DEFAULTS);
   const [format, setFormat] = useState<"csv" | "xlsx">("xlsx");
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const selectionCount = selection?.length ?? 0;
 
   // Escape closes; focus moves into the dialog so keyboard users aren't stranded.
   useEffect(() => {
@@ -51,6 +57,41 @@ export function ExportModal({
   }
 
   const href = `/api/runs/${runId}/export?format=${format}&mode=${mode}&columns=${selected.join(",")}`;
+
+  /**
+   * A selection goes by POST — a large one would exceed URL length limits as a
+   * query string — so the response has to be turned into a download by hand.
+   */
+  async function downloadSelection() {
+    setDownloading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/runs/${runId}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format, mode, columns: selected, selection }),
+      });
+      if (!res.ok) throw new Error(`Export failed (${res.status}).`);
+
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const named = /filename="([^"]+)"/.exec(disposition)?.[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = named ?? `keywords.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke on the next tick so the click has definitely been handled.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed.");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <div
@@ -71,6 +112,9 @@ export function ExportModal({
           Export
         </h2>
         <p className="mt-1 text-xs text-text-muted">
+          {selectionCount > 0
+            ? `${selectionCount.toLocaleString("en-IN")} selected ${selectionCount === 1 ? "row" : "rows"}. `
+            : ""}
           {mode === "intact"
             ? "Your original rows and order are preserved."
             : "One row per keyword after deduplication."}
@@ -112,20 +156,37 @@ export function ExportModal({
           </div>
         </fieldset>
 
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-heat-red">
+            {error}
+          </p>
+        )}
+
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose} className={BTN_SECONDARY}>
             Cancel
           </button>
-          <a
-            href={selected.length === 0 ? undefined : href}
-            aria-disabled={selected.length === 0}
-            onClick={() => {
-              if (selected.length > 0) setTimeout(onClose, 300);
-            }}
-            className={`${BTN_PRIMARY} ${selected.length === 0 ? "pointer-events-none opacity-50" : ""}`}
-          >
-            Download
-          </a>
+          {selectionCount > 0 ? (
+            <button
+              type="button"
+              disabled={selected.length === 0 || downloading}
+              onClick={downloadSelection}
+              className={BTN_PRIMARY}
+            >
+              {downloading ? "Preparing…" : `Download ${selectionCount.toLocaleString("en-IN")}`}
+            </button>
+          ) : (
+            <a
+              href={selected.length === 0 ? undefined : href}
+              aria-disabled={selected.length === 0}
+              onClick={() => {
+                if (selected.length > 0) setTimeout(onClose, 300);
+              }}
+              className={`${BTN_PRIMARY} ${selected.length === 0 ? "pointer-events-none opacity-50" : ""}`}
+            >
+              Download
+            </a>
+          )}
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { BTN_SECONDARY, CONTROL, Card, EmptyState } from "@/components/ui";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { BTN_PRIMARY, BTN_SECONDARY, CONTROL, Card, EmptyState } from "@/components/ui";
 import { formatCompact, formatInt, formatMicros } from "@/lib/format";
 import { bandColorVar, bandFor, tertileBands, type HeatBands } from "@/lib/heat";
 import type { DedupMode, ResultRow, RunSummary } from "@/lib/types";
@@ -9,6 +9,7 @@ import { Histogram, HeatLegend } from "./histogram";
 import { Sparkline } from "./sparkline";
 import { ExportModal } from "./export-modal";
 import { useStoredColumns } from "@/lib/use-stored-columns";
+import { resultRowKey } from "@/lib/row-key";
 
 /** Results table, filters and summary — PLAN.md §6 screen 2. */
 
@@ -24,9 +25,18 @@ const TOGGLEABLE: { key: ColumnKey; label: string }[] = [
   { key: "spark", label: "Trend" },
 ];
 
-type SortKey = "position" | "keyword" | "highTop" | "cpc" | "volume" | "competition";
+type SortKey = "position" | "keyword" | "lowTop" | "highTop" | "cpc" | "volume" | "competition";
+type SortState = { key: SortKey; dir: "asc" | "desc" };
 
 const VALID_COLUMNS = new Set<ColumnKey>(TOGGLEABLE.map((c) => c.key));
+
+/**
+ * Numeric columns push no-data rows to the bottom whichever way they sort — an
+ * absent bid is not "cheap". The keyword/position sorts are excluded on
+ * purpose: in "keep my list intact" mode the default position sort must
+ * reproduce the user's original row order, no-data rows included.
+ */
+const NUMERIC_SORTS = new Set<SortKey>(["lowTop", "highTop", "cpc", "volume", "competition"]);
 
 export function ResultsView({
   runId,
@@ -66,11 +76,29 @@ export function ResultsView({
         : TOGGLEABLE.map((c) => c.key),
     [storedColumns],
   );
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
-    key: mode === "intact" ? "position" : "highTop",
-    dir: mode === "intact" ? "asc" : "desc",
-  });
+  /*
+   * null = the run's default sort. Clicking a header cycles asc → desc →
+   * default, and the third click needs to be distinguishable from "sorted desc
+   * by the same column", which a plain {key, dir} pair cannot express.
+   * The default itself is unchanged: high top-of-page for deduped runs,
+   * original row order for intact ones.
+   */
+  const defaultSort = useMemo<SortState>(
+    () => ({ key: mode === "intact" ? "position" : "highTop", dir: mode === "intact" ? "asc" : "desc" }),
+    [mode],
+  );
+  const [sort, setSort] = useState<SortState | null>(null);
+  const activeSort = sort ?? defaultSort;
   const [exporting, setExporting] = useState(false);
+  const [exportSelectionOnly, setExportSelectionOnly] = useState(false);
+  /*
+   * Selection survives filter changes on purpose: a row hidden by a filter
+   * stays selected, so you can narrow, pick, re-narrow and pick again before
+   * exporting the union.
+   */
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  // Anchor for shift-click ranges, as a row key so it survives re-sorting.
+  const lastClickedKey = useRef<string | null>(null);
   const [customBands, setCustomBands] = useState<{ lower: string; upper: string }>({ lower: "", upper: "" });
 
   /*
@@ -113,9 +141,10 @@ export function ResultsView({
       return true;
     });
 
-    const dir = sort.dir === "asc" ? 1 : -1;
-    // Nulls always sort last, regardless of direction — an absent CPC is not
-    // "cheap", and burying it under real data is the useful behaviour.
+    const dir = activeSort.dir === "asc" ? 1 : -1;
+    const sinkNoData = NUMERIC_SORTS.has(activeSort.key);
+
+    // A missing value sorts last whichever way the column is pointing.
     const cmpNum = (a: number | null, b: number | null) => {
       if (a === null && b === null) return 0;
       if (a === null) return 1;
@@ -124,11 +153,17 @@ export function ResultsView({
     };
 
     return [...out].sort((a, b) => {
-      switch (sort.key) {
+      // No-data rows sink to the bottom of any numeric sort, ascending or
+      // descending, before the column comparison is even considered.
+      if (sinkNoData && a.noData !== b.noData) return a.noData ? 1 : -1;
+
+      switch (activeSort.key) {
         case "position":
           return ((a.position ?? 0) - (b.position ?? 0)) * dir;
         case "keyword":
           return a.submitted.localeCompare(b.submitted) * dir;
+        case "lowTop":
+          return cmpNum(a.lowTopMicros, b.lowTopMicros);
         case "highTop":
           return cmpNum(a.highTopMicros, b.highTopMicros);
         case "cpc":
@@ -141,17 +176,94 @@ export function ResultsView({
           return 0;
       }
     });
-  }, [rows, text, minCpc, maxCpc, minVolume, competition, hideNoData, bucket, sort]);
+  }, [rows, text, minCpc, maxCpc, minVolume, competition, hideNoData, bucket, activeSort]);
 
   const show = (k: ColumnKey) => visible.includes(k);
   const filtersActive =
     text !== "" || minCpc !== "" || maxCpc !== "" || minVolume !== "" || competition !== "" || bucket !== null;
 
-  function toggleSort(key: SortKey) {
-    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }));
+  /** asc → desc → back to the run's default. */
+  function cycleSort(key: SortKey) {
+    setSort((s) => {
+      const current = s ?? defaultSort;
+      if (s === null || current.key !== key) return { key, dir: "asc" };
+      if (current.dir === "asc") return { key, dir: "desc" };
+      return null;
+    });
   }
 
-  const sortArrow = (key: SortKey) => (sort.key === key ? (sort.dir === "asc" ? " ↑" : " ↓") : "");
+  const sortArrow = (key: SortKey) =>
+    activeSort.key === key ? (activeSort.dir === "asc" ? " ↑" : " ↓") : "";
+  const ariaSort = (key: SortKey): "ascending" | "descending" | "none" =>
+    activeSort.key === key ? (activeSort.dir === "asc" ? "ascending" : "descending") : "none";
+
+  // --- selection -----------------------------------------------------------
+
+  const filteredKeys = useMemo(() => filtered.map(resultRowKey), [filtered]);
+  const selectedInView = filteredKeys.filter((k) => selectedKeys.has(k)).length;
+  const allInViewSelected = filtered.length > 0 && selectedInView === filtered.length;
+
+  /** Select-all covers the CURRENT FILTERED VIEW, never the whole run. */
+  const toggleAllInView = useCallback(() => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      const everySelected = filteredKeys.every((k) => next.has(k));
+      for (const k of filteredKeys) {
+        if (everySelected) next.delete(k);
+        else next.add(k);
+      }
+      return next;
+    });
+  }, [filteredKeys]);
+
+  /**
+   * Shift-click selects the range between the previously clicked row and this
+   * one, in the order currently displayed. The range adopts the ANCHOR row's
+   * state, so shift-clicking after a tick extends the selection and after an
+   * untick clears it — the behaviour of every file list.
+   *
+   * The anchor is read and replaced BEFORE `setSelectedKeys`, not inside the
+   * updater: React runs the updater during the following render, by which time
+   * the ref would already hold the row just clicked, collapsing every range to
+   * its two endpoints.
+   *
+   * It is stored as a row key rather than an index so re-sorting between two
+   * clicks cannot select the wrong span.
+   */
+  const toggleRow = useCallback(
+    (key: string, shiftKey: boolean) => {
+      const anchor = lastClickedKey.current;
+      lastClickedKey.current = key;
+
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        const from = anchor === null ? -1 : filteredKeys.indexOf(anchor);
+        const to = filteredKeys.indexOf(key);
+
+        if (shiftKey && anchor !== null && from !== -1 && to !== -1) {
+          const [lo, hi] = from <= to ? [from, to] : [to, from];
+          const turningOn = prev.has(anchor);
+          for (let i = lo; i <= hi; i++) {
+            if (turningOn) next.add(filteredKeys[i]);
+            else next.delete(filteredKeys[i]);
+          }
+          return next;
+        }
+
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    },
+    [filteredKeys],
+  );
+
+  // The Keyword header sorts by original position in intact mode (so it can
+  // return the list to the user's order) and alphabetically when deduped.
+  const keywordSortKey: SortKey = mode === "intact" ? "position" : "keyword";
+  const selectedCount = selectedKeys.size;
+  // Selections deliberately outlive filters, so some may not be on screen.
+  const selectedHidden = selectedCount - selectedInView;
 
   return (
     <div className="space-y-4">
@@ -298,21 +410,67 @@ export function ResultsView({
                   : `Remove ${formatInt(noDataCount)} no-data ${noDataCount === 1 ? "row" : "rows"}`}
               </button>
             )}
-            <button type="button" className={BTN_SECONDARY} onClick={() => setExporting(true)}>
+            <button
+              type="button"
+              className={BTN_SECONDARY}
+              onClick={() => {
+                setExportSelectionOnly(false);
+                setExporting(true);
+              }}
+            >
               Export
             </button>
+            {selectedCount > 0 && (
+              <button
+                type="button"
+                className={BTN_PRIMARY}
+                onClick={() => {
+                  setExportSelectionOnly(true);
+                  setExporting(true);
+                }}
+              >
+                Export selected ({formatInt(selectedCount)})
+              </button>
+            )}
           </div>
         </div>
       </Card>
 
       {/* Table */}
       <Card className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
           <p className="text-xs text-text-secondary">
             {formatInt(filtered.length)}
             {filtered.length !== rows.length && <span className="text-text-muted"> of {formatInt(rows.length)}</span>}{" "}
             rows
           </p>
+
+          {selectedCount > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-accent">
+                {formatInt(selectedCount)} selected
+                {selectedHidden > 0 && (
+                  <span
+                    className="font-normal text-text-muted"
+                    title="Selections are kept when filters change"
+                  >
+                    {" "}
+                    ({formatInt(selectedHidden)} hidden by filters)
+                  </span>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedKeys(new Set());
+                  lastClickedKey.current = null;
+                }}
+                className="text-xs font-medium text-accent hover:underline"
+              >
+                Clear selection
+              </button>
+            </div>
+          )}
         </div>
 
         {filtered.length === 0 ? (
@@ -325,35 +483,84 @@ export function ResultsView({
             <table className="w-full border-collapse text-left">
               <thead className="sticky top-0 z-10 bg-surface">
                 <tr className="border-b border-border">
-                  <Th onClick={() => toggleSort(mode === "intact" ? "position" : "keyword")}>
-                    Keyword{sortArrow(mode === "intact" ? "position" : "keyword")}
+                  <th className="w-10 px-4 py-2">
+                    <input
+                      type="checkbox"
+                      checked={allInViewSelected}
+                      ref={(el) => {
+                        // Partial selection of the view reads as indeterminate.
+                        if (el) el.indeterminate = selectedInView > 0 && !allInViewSelected;
+                      }}
+                      onChange={toggleAllInView}
+                      aria-label={
+                        allInViewSelected
+                          ? "Deselect all rows in view"
+                          : "Select all rows in view"
+                      }
+                      title="Applies to the rows currently shown"
+                      className="accent-[var(--accent)]"
+                    />
+                  </th>
+                  <Th
+                    sortState={ariaSort(keywordSortKey)}
+                    onClick={() => cycleSort(keywordSortKey)}
+                  >
+                    Keyword{sortArrow(keywordSortKey)}
                   </Th>
-                  {show("lowTop") && <Th numeric>Low top-of-page</Th>}
+                  {show("lowTop") && (
+                    <Th numeric sortState={ariaSort("lowTop")} onClick={() => cycleSort("lowTop")}>
+                      Low top-of-page{sortArrow("lowTop")}
+                    </Th>
+                  )}
                   {show("highTop") && (
-                    <Th numeric onClick={() => toggleSort("highTop")}>High top-of-page{sortArrow("highTop")}</Th>
+                    <Th numeric sortState={ariaSort("highTop")} onClick={() => cycleSort("highTop")}>
+                      High top-of-page{sortArrow("highTop")}
+                    </Th>
                   )}
                   {hasDeltas && show("delta") && <Th numeric>Change</Th>}
                   {show("cpc") && (
-                    <Th numeric muted onClick={() => toggleSort("cpc")}>Avg CPC{sortArrow("cpc")}</Th>
+                    <Th numeric muted sortState={ariaSort("cpc")} onClick={() => cycleSort("cpc")}>
+                      Avg CPC{sortArrow("cpc")}
+                    </Th>
                   )}
-                  {show("volume") && <Th numeric onClick={() => toggleSort("volume")}>Volume{sortArrow("volume")}</Th>}
+                  {show("volume") && (
+                    <Th numeric sortState={ariaSort("volume")} onClick={() => cycleSort("volume")}>
+                      Volume{sortArrow("volume")}
+                    </Th>
+                  )}
                   {show("competition") && (
-                    <Th numeric onClick={() => toggleSort("competition")}>Comp{sortArrow("competition")}</Th>
+                    <Th numeric sortState={ariaSort("competition")} onClick={() => cycleSort("competition")}>
+                      Comp{sortArrow("competition")}
+                    </Th>
                   )}
                   {show("spark") && <Th>Trend</Th>}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r, i) => {
+                {filtered.map((r) => {
                   const band = bandFor(r.highTopMicros, bands);
+                  const key = resultRowKey(r);
+                  const isSelected = selectedKeys.has(key);
                   return (
                     <tr
-                      key={`${r.submitted}-${r.position ?? i}`}
+                      key={key}
                       className={
                         "border-b border-border last:border-0 hover:bg-accent-soft/40 " +
+                        (isSelected ? "bg-accent-soft/60 " : "") +
                         (r.noData ? "opacity-45" : "")
                       }
                     >
+                      <td className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          // onClick carries shiftKey; onChange does not.
+                          onClick={(e) => toggleRow(key, e.shiftKey)}
+                          onChange={() => {}}
+                          aria-label={`Select ${r.submitted}`}
+                          className="accent-[var(--accent)]"
+                        />
+                      </td>
                       <td className="px-4 py-2 text-sm text-text">
                         <span className="block max-w-[320px] truncate" title={r.submitted}>
                           {r.submitted}
@@ -405,7 +612,13 @@ export function ResultsView({
       </Card>
 
       {exporting && (
-        <ExportModal runId={runId} mode={mode} hasUpload={hasUpload} onClose={() => setExporting(false)} />
+        <ExportModal
+          runId={runId}
+          mode={mode}
+          hasUpload={hasUpload}
+          selection={exportSelectionOnly ? [...selectedKeys] : undefined}
+          onClose={() => setExporting(false)}
+        />
       )}
     </div>
   );
@@ -487,24 +700,41 @@ function Th({
   numeric,
   muted,
   onClick,
+  sortState,
 }: {
   children: React.ReactNode;
   numeric?: boolean;
   muted?: boolean;
   onClick?: () => void;
+  sortState?: "ascending" | "descending" | "none";
 }) {
+  const sortable = Boolean(onClick);
   return (
     <th
       className={
         "whitespace-nowrap px-4 py-2 text-xs font-medium " +
         (muted ? "text-text-muted " : "text-text-secondary ") +
         (numeric ? "text-right " : "") +
-        (onClick ? "cursor-pointer select-none hover:text-accent" : "")
+        (sortable ? "cursor-pointer select-none hover:text-accent" : "")
       }
       onClick={onClick}
-      aria-sort={onClick ? "none" : undefined}
+      aria-sort={sortable ? (sortState ?? "none") : undefined}
     >
-      {children}
+      {sortable ? (
+        // A real button keeps the header reachable by keyboard.
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick?.();
+          }}
+          className="cursor-pointer font-medium hover:text-accent"
+        >
+          {children}
+        </button>
+      ) : (
+        children
+      )}
     </th>
   );
 }

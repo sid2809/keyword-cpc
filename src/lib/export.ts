@@ -4,6 +4,7 @@ import writeXlsxFile from "write-excel-file/node";
 import { query } from "./db";
 import { getResults } from "./results";
 import { microsToRupees } from "./format";
+import { resultRowKey } from "./row-key";
 import type { DedupMode, ResultRow } from "./types";
 
 /**
@@ -97,9 +98,19 @@ export async function buildExportGrid(
   runId: string,
   columns: ExportColumnKey[],
   mode?: DedupMode,
+  /**
+   * Row keys to export (see row-key.ts). Omit to export every row. Rows keep
+   * their natural order — the selection filters, it never reorders — so an
+   * intact-mode export still matches the user's original sheet.
+   */
+  selection?: string[],
 ): Promise<ExportGrid> {
   const selected = columns.length > 0 ? columns : DEFAULT_EXPORT_COLUMNS;
-  const rows = await getResults(runId, mode);
+  const all = await getResults(runId, mode);
+  // Build the lookup once — a 10,000-row export would otherwise rebuild the set
+  // per row.
+  const wanted = selection && selection.length > 0 ? new Set(selection) : null;
+  const rows = wanted ? all.filter((r) => wanted.has(resultRowKey(r))) : all;
   const metricColumns = EXPORT_COLUMNS.filter((c) => selected.includes(c.key));
 
   const upload = mode === "deduped" ? null : await getUpload(runId);

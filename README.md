@@ -173,9 +173,22 @@ product decision rather than a workaround.
   duplicates don't double-count the volume-weighted average. In "keep my list
   intact" mode the table therefore shows more rows than the "Unique keywords"
   figure.
+- **Every numeric column sorts** — low and high top-of-page, avg CPC, volume and
+  competition. Clicking a header cycles ascending → descending → back to the
+  run's default. No-data rows sink to the bottom of a numeric sort whichever way
+  it points; an absent bid is not "cheap". The keyword/position sort is exempt so
+  that "keep my list intact" mode can still reproduce your original row order.
+- **Select rows** with the checkbox column. The header checkbox selects the
+  **current filtered view**, not the whole run, and shift-click selects a range,
+  taking the state of the row you anchored on. Selections deliberately **survive
+  filter changes** — narrow, pick, re-narrow, pick again, then export the union.
+  Anything selected but hidden is reported next to the count.
 - **Export** offers column selection and CSV/XLSX. In intact mode it preserves
   your original row order, and if the run came from an uploaded sheet your other
-  columns are re-attached ahead of the metrics.
+  columns are re-attached ahead of the metrics. **Export selected** applies the
+  same rules to just the selected rows, still in their original order. It posts
+  the selection rather than putting it in the URL, since a large one would
+  exceed URL length limits.
 
 ### Saving, refreshing and deleting
 
