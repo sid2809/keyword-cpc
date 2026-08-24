@@ -28,7 +28,12 @@ export function formatMicros(micros: number | null | undefined): string {
  */
 export function microsToRupees(micros: number | null | undefined): number | null {
   if (micros === null || micros === undefined) return null;
-  return Math.round(micros / 10_000) / 100;
+  // Round the magnitude, not the signed value: Math.round breaks halves toward
+  // +Infinity, so -1.505 would round to -1.50 while +1.505 rounds to +1.51.
+  // Bids are never negative in practice, but asymmetric money rounding is not
+  // something to leave in a function that formats currency.
+  const sign = micros < 0 ? -1 : 1;
+  return (sign * Math.round(Math.abs(micros) / 10_000)) / 100;
 }
 
 export function formatInt(n: number | null | undefined): string {

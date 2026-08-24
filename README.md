@@ -83,6 +83,24 @@ npm run dev          # http://localhost:3000
 | `npm run scan:secrets` | gitleaks over the staged diff (what the pre-commit hook runs) |
 | `npm run scan:secrets:all` | gitleaks over the full history |
 
+A pre-deploy audit of the whole application is recorded in
+[AUDIT.md](./AUDIT.md) — what was tested, the seven defects found and fixed, and
+the gaps that remain untestable locally. Read its closing section before
+deploying: it lists three things to do first.
+
+## Login rate limiting
+
+Four wrong passwords are allowed; the fifth locks logins for 30 seconds, and
+each further lock doubles up to a 5-minute ceiling. A success clears the
+counter, and failures decay after 15 quiet minutes.
+
+The limit is **global, not per-IP**. Behind Railway's proxy the only client
+address available is `x-forwarded-for`, which a client sets itself, so a per-IP
+limit is bypassed by rotating one header. With exactly one legitimate user a
+global lock is unspoofable; the cost is that an attacker can lock you out for
+the cooldown, which is why it is capped at minutes. Restarting the server
+clears it.
+
 ## Secret scanning
 
 **This repository is public.** A committed credential is public the moment it is

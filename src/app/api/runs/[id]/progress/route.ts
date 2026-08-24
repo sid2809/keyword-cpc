@@ -8,6 +8,7 @@ export async function GET(_request: Request, { params }: RouteContext<"/api/runs
   if (!(await getSession())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;
+  // getRun already rejects malformed ids, so this covers both shapes of miss.
   const run = await getRun(id);
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });
 

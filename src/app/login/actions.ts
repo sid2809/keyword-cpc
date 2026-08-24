@@ -8,6 +8,12 @@ import {
   sessionCookieOptions,
   verifyPassword,
 } from "@/lib/session";
+import {
+  checkLoginAllowed,
+  describeLock,
+  recordLoginFailure,
+  recordLoginSuccess,
+} from "@/lib/login-rate-limit";
 
 export type LoginState = { error: string | null };
 
@@ -15,10 +21,22 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const password = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "/");
 
-  if (!verifyPassword(password)) {
-    return { error: "Incorrect password." };
+  // Refuse before touching the password at all while locked out.
+  const gate = checkLoginAllowed();
+  if (gate.locked) {
+    return { error: `Too many attempts. Try again in ${describeLock(gate.retryAfterSeconds)}.` };
   }
 
+  if (!verifyPassword(password)) {
+    const now = recordLoginFailure();
+    return {
+      error: now.locked
+        ? `Too many attempts. Try again in ${describeLock(now.retryAfterSeconds)}.`
+        : "Incorrect password.",
+    };
+  }
+
+  recordLoginSuccess();
   const store = await cookies();
   store.set(SESSION_COOKIE, createSessionToken(), sessionCookieOptions());
 

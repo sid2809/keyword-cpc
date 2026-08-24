@@ -1,6 +1,7 @@
 import "server-only";
 import { query } from "./db";
 import { getRunSummary } from "./results";
+import { isRunId } from "./ids";
 import type { RunSummary } from "./types";
 
 /**
@@ -45,15 +46,7 @@ type MetricRow = {
 
 const big = (v: string | null | undefined) => (v === null || v === undefined ? null : Number(v));
 
-/**
- * Postgres raises "invalid input syntax for type uuid" on a malformed id, which
- * surfaces as a 500 rather than the page's own empty state. Guard before
- * querying so a hand-edited URL gets the friendly message instead.
- */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export function isRunId(v: string | null | undefined): v is string {
-  return typeof v === "string" && UUID_RE.test(v);
-}
+export { isRunId } from "./ids";
 
 async function loadRun(runId: string) {
   const meta = await query<{ id: string; name: string | null; created_at: Date }>(

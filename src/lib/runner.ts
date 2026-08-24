@@ -7,6 +7,7 @@ import {
 } from "./google-ads";
 import { chunk, distinctNormalized, type ParsedKeyword } from "./keywords";
 import { settingsHash, withDefaults } from "./run-settings";
+import { isRunId } from "./ids";
 import type { RunSettings, RunSource, RunStatus } from "./types";
 
 export type { RunSource, RunStatus };
@@ -104,6 +105,9 @@ export async function createRun(input: {
 }
 
 export async function getRun(runId: string): Promise<RunRow | null> {
+  // A malformed id makes Postgres throw rather than return no rows, which
+  // surfaces as a 500. Treat it as "not found", which is what it is.
+  if (!isRunId(runId)) return null;
   const rows = await query<RunRow>("select * from runs where id = $1", [runId]);
   return rows[0] ?? null;
 }

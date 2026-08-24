@@ -20,9 +20,25 @@ export type ParsedKeyword = {
   sourceRow: number | null;
 };
 
-/** Collapse internal runs of whitespace and trim. Casing preserved. */
+/**
+ * Collapse internal runs of whitespace and trim. Casing preserved.
+ *
+ * Also strips characters Postgres cannot store in a `text` column. A NUL byte
+ * reaches the driver and the INSERT dies with
+ * `invalid byte sequence for encoding "UTF8": 0x00`, taking the whole run with
+ * it — so control characters and unpaired surrogates are removed here, at the
+ * one place every keyword passes through, rather than guarded at each INSERT.
+ */
 export function tidy(raw: string): string {
-  return raw.replace(/\s+/g, " ").trim();
+  return (
+    String(raw ?? "")
+      // C0/C1 controls except the whitespace ones, which the \s pass handles.
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "")
+      // Lone surrogates are not valid UTF-8 and are rejected the same way.
+      .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 export function normalize(raw: string): string {

@@ -1,6 +1,7 @@
 import "server-only";
 import { query } from "./db";
 import { withDefaults } from "./run-settings";
+import { isRunId } from "./ids";
 import type { MonthlyVolume, ResultRow, RunSettings, RunSummary } from "./types";
 
 export type { ResultRow, RunSummary };
@@ -103,6 +104,7 @@ export async function getResults(
   runId: string,
   mode?: RunSettings["dedupMode"],
 ): Promise<ResultRow[]> {
+  if (!isRunId(runId)) throw new Error("Run not found");
   const runRows = await query<{ settings: RunSettings }>("select settings from runs where id = $1", [runId]);
   if (runRows.length === 0) throw new Error(`Run ${runId} not found`);
   const dedupMode = mode ?? withDefaults(runRows[0].settings).dedupMode;
@@ -174,6 +176,7 @@ export async function getResults(
  * duplicated submitted rows would double-count.
  */
 export async function getRunSummary(runId: string): Promise<RunSummary> {
+  if (!isRunId(runId)) throw new Error("Run not found");
   const rows = await query<MetricsDbRow>(
     `select canonical_text, average_cpc_micros, avg_monthly_searches, competition,
             competition_index, low_top_micros, high_top_micros, monthly_volumes, no_data,
