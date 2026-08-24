@@ -17,6 +17,8 @@ export type UploadedSheet = {
   totalRows: number;
   hasHeader: boolean;
   suggestedColumn: number;
+  /** -1 when nothing in the sheet looks like a URL column. */
+  suggestedUrlColumn: number;
 };
 
 export function UploadPanel({
@@ -24,11 +26,16 @@ export function UploadPanel({
   onSheet,
   keywordColumn,
   onKeywordColumn,
+  urlColumn,
+  onUrlColumn,
 }: {
   sheet: UploadedSheet | null;
   onSheet: (s: UploadedSheet | null) => void;
   keywordColumn: number;
   onKeywordColumn: (i: number) => void;
+  /** -1 means "no URL column" — the feature stays entirely optional. */
+  urlColumn: number;
+  onUrlColumn: (i: number) => void;
 }) {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -44,8 +51,10 @@ export function UploadPanel({
       const res = await fetch("/api/upload", { method: "POST", body: form });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Upload failed.");
-      onSheet(json as UploadedSheet);
-      onKeywordColumn((json as UploadedSheet).suggestedColumn);
+      const parsed = json as UploadedSheet;
+      onSheet(parsed);
+      onKeywordColumn(parsed.suggestedColumn);
+      onUrlColumn(parsed.suggestedUrlColumn ?? -1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
       onSheet(null);
@@ -126,22 +135,45 @@ export function UploadPanel({
         </button>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="kw-col" className="text-xs font-medium text-text-secondary">
-          Which column has the keywords?
-        </label>
-        <select
-          id="kw-col"
-          className="h-9 w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 text-sm text-text"
-          value={keywordColumn}
-          onChange={(e) => onKeywordColumn(Number(e.target.value))}
-        >
-          {sheet.columns.map((c, i) => (
-            <option key={`${c}-${i}`} value={i}>
-              {c}
-            </option>
-          ))}
-        </select>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="kw-col" className="text-xs font-medium text-text-secondary">
+            Which column has the keywords?
+          </label>
+          <select
+            id="kw-col"
+            className="h-9 w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 text-sm text-text"
+            value={keywordColumn}
+            onChange={(e) => onKeywordColumn(Number(e.target.value))}
+          >
+            {sheet.columns.map((c, i) => (
+              <option key={`${c}-${i}`} value={i}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="url-col" className="text-xs font-medium text-text-secondary">
+            URL column <span className="font-normal text-text-muted">(optional)</span>
+          </label>
+          <select
+            id="url-col"
+            className="h-9 w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 text-sm text-text"
+            value={urlColumn}
+            onChange={(e) => onUrlColumn(Number(e.target.value))}
+          >
+            <option value={-1}>None</option>
+            {sheet.columns.map((c, i) =>
+              i === keywordColumn ? null : (
+                <option key={`u-${c}-${i}`} value={i}>
+                  {c}
+                </option>
+              ),
+            )}
+          </select>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto rounded-[var(--radius-card)] border border-border">
@@ -153,11 +185,14 @@ export function UploadPanel({
                   key={`${c}-${i}`}
                   className={
                     "whitespace-nowrap border-b border-border px-3 py-2 text-xs font-medium " +
-                    (i === keywordColumn ? "bg-accent-soft text-accent" : "text-text-secondary")
+                    (i === keywordColumn || i === urlColumn
+                      ? "bg-accent-soft text-accent"
+                      : "text-text-secondary")
                   }
                 >
                   {c}
                   {i === keywordColumn && <span className="ml-1.5 text-[10px] uppercase">keywords</span>}
+                  {i === urlColumn && <span className="ml-1.5 text-[10px] uppercase">url</span>}
                 </th>
               ))}
             </tr>
@@ -170,7 +205,7 @@ export function UploadPanel({
                     key={c}
                     className={
                       "max-w-[240px] truncate border-b border-border px-3 py-1.5 text-sm " +
-                      (c === keywordColumn ? "text-text" : "text-text-secondary")
+                      (c === keywordColumn || c === urlColumn ? "text-text" : "text-text-secondary")
                     }
                   >
                     {row[c] ?? ""}
@@ -184,6 +219,7 @@ export function UploadPanel({
       <p className="text-xs text-text-muted">
         Showing the first {Math.min(sheet.preview.length, sheet.totalRows)} rows. Your other columns are
         kept and re-attached when you export.
+        {urlColumn >= 0 && " The URL column also appears in the results table."}
       </p>
     </div>
   );

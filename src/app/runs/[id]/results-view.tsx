@@ -13,9 +13,10 @@ import { resultRowKey } from "@/lib/row-key";
 
 /** Results table, filters and summary — PLAN.md §6 screen 2. */
 
-type ColumnKey = "lowTop" | "highTop" | "delta" | "cpc" | "volume" | "competition" | "spark";
+type ColumnKey = "url" | "lowTop" | "highTop" | "delta" | "cpc" | "volume" | "competition" | "spark";
 
 const TOGGLEABLE: { key: ColumnKey; label: string }[] = [
+  { key: "url", label: "URL" },
   { key: "lowTop", label: "Low top-of-page" },
   { key: "highTop", label: "High top-of-page" },
   { key: "delta", label: "Change" },
@@ -45,6 +46,7 @@ export function ResultsView({
   mode,
   hasUpload,
   hasDeltas,
+  hasUrls,
 }: {
   runId: string;
   rows: ResultRow[];
@@ -53,6 +55,11 @@ export function ResultsView({
   hasUpload: boolean;
   /** True once this run has been refreshed at least once. */
   hasDeltas: boolean;
+  /**
+   * True when the run came from a sheet with a designated URL column. Pasted
+   * runs and sheets without one never show the column at all.
+   */
+  hasUrls: boolean;
 }) {
   const [text, setText] = useState("");
   const [minCpc, setMinCpc] = useState("");
@@ -385,7 +392,9 @@ export function ResultsView({
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-xs font-medium text-text-secondary">Columns</span>
-            {TOGGLEABLE.filter((c) => c.key !== "delta" || hasDeltas).map((c) => (
+            {TOGGLEABLE.filter(
+              (c) => (c.key !== "delta" || hasDeltas) && (c.key !== "url" || hasUrls),
+            ).map((c) => (
               <label key={c.key} className="flex items-center gap-1.5 text-xs text-text-secondary">
                 <input
                   type="checkbox"
@@ -507,6 +516,7 @@ export function ResultsView({
                   >
                     Keyword{sortArrow(keywordSortKey)}
                   </Th>
+                  {hasUrls && show("url") && <Th>URL</Th>}
                   {show("lowTop") && (
                     <Th numeric sortState={ariaSort("lowTop")} onClick={() => cycleSort("lowTop")}>
                       Low top-of-page{sortArrow("lowTop")}
@@ -571,6 +581,11 @@ export function ResultsView({
                           </span>
                         )}
                       </td>
+                      {hasUrls && show("url") && (
+                        <td className="px-4 py-2">
+                          <UrlCell urls={r.urls} />
+                        </td>
+                      )}
                       {show("lowTop") && (
                         <td className="num px-4 py-2 text-right text-text-secondary">{formatMicros(r.lowTopMicros)}</td>
                       )}
@@ -616,11 +631,50 @@ export function ResultsView({
           runId={runId}
           mode={mode}
           hasUpload={hasUpload}
+          hasUrls={hasUrls}
           selection={exportSelectionOnly ? [...selectedKeys] : undefined}
           onClose={() => setExporting(false)}
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Destination URL(s) for a row.
+ *
+ * Intact mode has at most one. Deduped mode can carry several, because variants
+ * that collapsed into one canonical keyword may point at different pages — the
+ * first is shown and the rest flagged as "+n more", with the full list in the
+ * tooltip and in the export. Several pages competing for one keyword is a
+ * finding worth surfacing, not something to hide behind a single value.
+ */
+function UrlCell({ urls }: { urls: string[] }) {
+  if (urls.length === 0) return <span className="text-text-muted">—</span>;
+
+  const [first, ...rest] = urls;
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <a
+        href={first}
+        target="_blank"
+        rel="noopener noreferrer"
+        // noopener matters: these URLs come from an uploaded file.
+        title={urls.join("\n")}
+        onClick={(e) => e.stopPropagation()}
+        className="block max-w-[260px] truncate text-sm text-accent hover:underline"
+      >
+        {first.replace(/^https?:\/\//, "")}
+      </a>
+      {rest.length > 0 && (
+        <span
+          className="shrink-0 whitespace-nowrap text-xs text-text-muted"
+          title={`Also targets:\n${rest.join("\n")}`}
+        >
+          +{rest.length} more
+        </span>
+      )}
+    </span>
   );
 }
 

@@ -24,6 +24,7 @@ export const EXPORT_COLUMNS = [
   { key: "lowTop", label: "Low top-of-page (₹)" },
   { key: "highTop", label: "High top-of-page (₹)" },
   { key: "avgCpc", label: "Avg CPC (₹, info)" },
+  { key: "url", label: "URL" },
   { key: "volume", label: "Avg monthly searches" },
   { key: "competition", label: "Competition" },
   { key: "competitionIndex", label: "Competition index" },
@@ -65,6 +66,10 @@ function valueFor(row: ResultRow, key: ExportColumnKey): Cell {
     case "monthly":
       // Flattened so one cell stays readable in a spreadsheet.
       return row.monthlyVolumes?.map((v) => `${v.year}-${String(v.month).padStart(2, "0")}:${v.searches}`).join(" ") ?? null;
+    case "url":
+      // All distinct URLs, so a deduped row loses nothing that the table
+      // summarised as "+n more".
+      return row.urls.length > 0 ? row.urls.join(" | ") : null;
     case "noData":
       return row.noData ? "yes" : "";
     default:
@@ -77,11 +82,12 @@ type UploadRow = {
   columns: string[];
   rows: string[][];
   keyword_column: number;
+  url_column: number | null;
 };
 
 async function getUpload(runId: string): Promise<UploadRow | null> {
   const rows = await query<UploadRow>(
-    "select filename, columns, rows, keyword_column from run_uploads where run_id = $1",
+    "select filename, columns, rows, keyword_column, url_column from run_uploads where run_id = $1",
     [runId],
   );
   return rows[0] ?? null;
@@ -116,12 +122,29 @@ export async function buildExportGrid(
   const upload = mode === "deduped" ? null : await getUpload(runId);
 
   if (upload && rows.length > 0 && rows[0].position !== null) {
-    // Intact + uploaded: original sheet columns first, metrics appended.
-    // Row order matches, because run_keywords.position was assigned from the
-    // sheet's row order when the run was created.
+    /*
+     * Intact + uploaded: the user's original columns lead, metrics follow.
+     *
+     * Rows are looked up by `source_row`, NOT by `position`. `position` counts
+     * only non-empty keywords, so on a sheet with a blank keyword cell it drifts
+     * out of step with the sheet and attaches the wrong original row — and,
+     * once URLs are involved, the wrong destination page — to everything after
+     * the gap.
+     */
+    const sourceRows = await query<{ position: number; source_row: number | null }>(
+      "select position, source_row from run_keywords where run_id = $1",
+      [runId],
+    );
+    const sourceByPosition = new Map(sourceRows.map((r) => [r.position, r.source_row]));
+
     const header = [...upload.columns, ...metricColumns.map((c) => c.label)];
     const body = rows.map((row) => {
-      const original = row.position !== null ? (upload.rows[row.position] ?? []) : [];
+      // Runs created before source_row existed have null; fall back to position
+      // so their exports keep working exactly as they did, rather than coming
+      // back with every uploaded column blank.
+      const mapped = row.position !== null ? sourceByPosition.get(row.position) : null;
+      const sourceRow = mapped ?? row.position;
+      const original = sourceRow !== null && sourceRow !== undefined ? (upload.rows[sourceRow] ?? []) : [];
       const padded = [...original, ...Array(Math.max(0, upload.columns.length - original.length)).fill("")];
       return [...padded, ...metricColumns.map((c) => valueFor(row, c.key))];
     });

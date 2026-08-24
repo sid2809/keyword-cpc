@@ -32,7 +32,12 @@ function big(v: string | null): number | null {
   return v === null ? null : Number(v);
 }
 
-function toRow(submitted: string, position: number | null, m: MetricsDbRow | undefined): ResultRow {
+function toRow(
+  submitted: string,
+  position: number | null,
+  m: MetricsDbRow | undefined,
+  urls: string[] = [],
+): ResultRow {
   if (!m) {
     return {
       submitted,
@@ -46,6 +51,7 @@ function toRow(submitted: string, position: number | null, m: MetricsDbRow | und
       highTopMicros: null,
       monthlyVolumes: null,
       noData: true,
+      urls,
       prevHighTopMicros: null,
       prevLowTopMicros: null,
       prevAverageCpcMicros: null,
@@ -64,11 +70,33 @@ function toRow(submitted: string, position: number | null, m: MetricsDbRow | und
     highTopMicros: big(m.high_top_micros),
     monthlyVolumes: m.monthly_volumes,
     noData: m.no_data,
+    urls,
     prevHighTopMicros: big(m.prev_high_top_micros),
     prevLowTopMicros: big(m.prev_low_top_micros),
     prevAverageCpcMicros: big(m.prev_average_cpc_micros),
     prevAvgMonthlySearches: big(m.prev_avg_monthly_searches),
   };
+}
+
+type UploadRow = { rows: string[][]; url_column: number | null };
+
+/**
+ * Loads the uploaded sheet's URL column, if the user designated one.
+ * Returns null for pasted runs and for sheets with no URL column, so every
+ * caller degrades to "no URL column" rather than special-casing.
+ */
+async function loadUrlSource(runId: string): Promise<UploadRow | null> {
+  const rows = await query<UploadRow>(
+    "select rows, url_column from run_uploads where run_id = $1 and url_column is not null",
+    [runId],
+  );
+  return rows[0] ?? null;
+}
+
+function urlAt(upload: UploadRow | null, sourceRow: number | null): string | null {
+  if (!upload || sourceRow === null || upload.url_column === null) return null;
+  const value = (upload.rows[sourceRow]?.[upload.url_column] ?? "").trim();
+  return value === "" ? null : value;
 }
 
 export async function getResults(
@@ -89,21 +117,56 @@ export async function getResults(
   );
   const byCanonical = new Map(metrics.map((m) => [m.canonical_text, m]));
 
+  const [upload, submitted] = await Promise.all([
+    loadUrlSource(runId),
+    query<{
+      submitted_text: string;
+      canonical_text: string | null;
+      position: number;
+      source_row: number | null;
+    }>(
+      `select submitted_text, canonical_text, position, source_row
+         from run_keywords where run_id = $1 order by position asc`,
+      [runId],
+    ),
+  ]);
+
   if (dedupMode === "deduped") {
+    /*
+     * DEDUPED URL RULE: collect every DISTINCT URL of the submitted rows that
+     * collapsed into this canonical keyword, in first-appearance order.
+     *
+     * Discarding all but one would silently lose information, and one keyword
+     * pointing at several pages is itself the finding — that is page-feed
+     * cannibalisation, which is precisely what this tool exists to surface. The
+     * table shows the first and flags the rest rather than hiding them, and the
+     * export carries the full list.
+     */
+    const urlsByCanonical = new Map<string, string[]>();
+    for (const row of submitted) {
+      if (!row.canonical_text) continue;
+      const url = urlAt(upload, row.source_row);
+      if (url === null) continue;
+      const list = urlsByCanonical.get(row.canonical_text) ?? [];
+      if (!list.includes(url)) list.push(url);
+      urlsByCanonical.set(row.canonical_text, list);
+    }
+
     return metrics
-      .map((m) => toRow(m.canonical_text, null, m))
+      .map((m) => toRow(m.canonical_text, null, m, urlsByCanonical.get(m.canonical_text) ?? []))
       .sort((a, b) => a.submitted.localeCompare(b.submitted));
   }
 
-  // Intact: replay the user's rows in their original order.
-  const submitted = await query<{ submitted_text: string; canonical_text: string | null; position: number }>(
-    "select submitted_text, canonical_text, position from run_keywords where run_id = $1 order by position asc",
-    [runId],
-  );
-
-  return submitted.map((s) =>
-    toRow(s.submitted_text, s.position, s.canonical_text ? byCanonical.get(s.canonical_text) : undefined),
-  );
+  // Intact: replay the user's rows in their original order, each with its own URL.
+  return submitted.map((row) => {
+    const url = urlAt(upload, row.source_row);
+    return toRow(
+      row.submitted_text,
+      row.position,
+      row.canonical_text ? byCanonical.get(row.canonical_text) : undefined,
+      url === null ? [] : [url],
+    );
+  });
 }
 
 /**

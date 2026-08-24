@@ -12,6 +12,7 @@ const COLUMNS = [
   { key: "lowTop", label: "Low top-of-page (₹)" },
   { key: "highTop", label: "High top-of-page (₹)" },
   { key: "avgCpc", label: "Avg CPC (₹, info)" },
+  { key: "url", label: "URL" },
   { key: "volume", label: "Avg monthly searches" },
   { key: "competition", label: "Competition" },
   { key: "competitionIndex", label: "Competition index" },
@@ -25,12 +26,15 @@ export function ExportModal({
   runId,
   mode,
   hasUpload,
+  hasUrls,
   onClose,
   selection,
 }: {
   runId: string;
   mode: DedupMode;
   hasUpload: boolean;
+  /** Hides the URL option for runs that have none. */
+  hasUrls: boolean;
   onClose: () => void;
   /** Row keys to export. Undefined exports every row. */
   selection?: string[];
@@ -124,7 +128,7 @@ export function ExportModal({
         <fieldset className="mt-4">
           <legend className="text-xs font-medium text-text-secondary">Columns</legend>
           <div className="mt-2 grid grid-cols-2 gap-1.5">
-            {COLUMNS.map((c) => (
+            {COLUMNS.filter((c) => c.key !== "url" || hasUrls).map((c) => (
               <label key={c.key} className="flex items-center gap-2 text-sm text-text">
                 <input
                   type="checkbox"

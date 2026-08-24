@@ -31,9 +31,14 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
     ? await Promise.all([
         getResults(id, settings.dedupMode),
         getRunSummary(id),
-        query<{ n: string }>("select count(*)::text as n from run_uploads where run_id = $1", [id]),
+        query<{ n: string; has_urls: boolean }>(
+          `select count(*)::text as n,
+                  coalesce(bool_or(url_column is not null), false) as has_urls
+             from run_uploads where run_id = $1`,
+          [id],
+        ),
       ])
-    : [[], null, [{ n: "0" }]];
+    : [[], null, [{ n: "0", has_urls: false }]];
 
   return (
     <>
@@ -74,6 +79,7 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
             mode={settings.dedupMode}
             hasUpload={Number(uploadRows[0]?.n ?? 0) > 0}
             hasDeltas={run.refresh_count > 0}
+            hasUrls={uploadRows[0]?.has_urls ?? false}
           />
         ) : run.status === "failed" ? (
           <FailedRun

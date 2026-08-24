@@ -9,8 +9,15 @@ export type ParsedKeyword = {
   submitted: string;
   /** Lowercased, whitespace-collapsed form used for comparison and sending. */
   normalized: string;
-  /** Original row order. */
+  /** Original row order among non-empty keywords. */
   position: number;
+  /**
+   * Index into the uploaded sheet's rows that this keyword came from, or null
+   * for pasted input. Distinct from `position`, which skips blank cells —
+   * conflating the two attaches the wrong sheet row to every keyword after a
+   * gap.
+   */
+  sourceRow: number | null;
 };
 
 /** Collapse internal runs of whitespace and trim. Casing preserved. */
@@ -40,17 +47,29 @@ export function parseKeywordText(text: string): ParsedKeyword[] {
     submitted,
     normalized: submitted.toLowerCase(),
     position: i,
+    sourceRow: null,
   }));
 }
 
-/** Same normalisation for keywords arriving from a spreadsheet column. */
+/**
+ * Same normalisation for keywords arriving from a spreadsheet column.
+ *
+ * `values` MUST be the column exactly as it appears in the sheet, blanks
+ * included — the array index is recorded as `sourceRow`, and pre-filtering it
+ * would reintroduce the misalignment this exists to prevent.
+ */
 export function parseKeywordList(values: string[]): ParsedKeyword[] {
   const out: ParsedKeyword[] = [];
-  for (const value of values) {
+  values.forEach((value, index) => {
     const submitted = tidy(value ?? "");
-    if (!submitted) continue;
-    out.push({ submitted, normalized: submitted.toLowerCase(), position: out.length });
-  }
+    if (!submitted) return;
+    out.push({
+      submitted,
+      normalized: submitted.toLowerCase(),
+      position: out.length,
+      sourceRow: index,
+    });
+  });
   return out;
 }
 

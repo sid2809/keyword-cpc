@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { guessKeywordColumn, parseSpreadsheet, PREVIEW_ROWS } from "@/lib/spreadsheet";
+import { guessKeywordColumn, guessUrlColumn, parseSpreadsheet, PREVIEW_ROWS } from "@/lib/spreadsheet";
 
 /**
  * Parses an uploaded CSV/XLSX and returns its columns plus a preview, so the
@@ -26,6 +26,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "That file appears to be empty." }, { status: 400 });
     }
 
+    const keywordColumn = guessKeywordColumn(sheet);
+
     return NextResponse.json({
       filename: file.name,
       columns: sheet.columns,
@@ -33,7 +35,9 @@ export async function POST(request: Request) {
       preview: sheet.rows.slice(0, PREVIEW_ROWS),
       totalRows: sheet.totalRows,
       hasHeader: sheet.hasHeader,
-      suggestedColumn: guessKeywordColumn(sheet),
+      suggestedColumn: keywordColumn,
+      // -1 when nothing in the sheet looks like a URL column.
+      suggestedUrlColumn: guessUrlColumn(sheet, keywordColumn),
     });
   } catch (err) {
     return NextResponse.json(

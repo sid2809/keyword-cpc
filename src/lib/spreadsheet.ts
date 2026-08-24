@@ -115,6 +115,37 @@ export function guessKeywordColumn(sheet: ParsedSheet): number {
   return best;
 }
 
+/**
+ * Guesses which column holds destination URLs, or -1 when none looks like one.
+ *
+ * Requires actual URL-ish values, not just a promising header: a column called
+ * "Link" full of prose should not be offered as the URL column. Optional by
+ * design — most sheets have no URL column at all.
+ */
+export function guessUrlColumn(sheet: ParsedSheet, keywordColumn: number): number {
+  let best = -1;
+  let bestScore = 0;
+
+  for (let col = 0; col < sheet.columns.length; col++) {
+    if (col === keywordColumn) continue;
+    const sample = sheet.rows.slice(0, 200).map((r) => (r[col] ?? "").trim()).filter((v) => v !== "");
+    if (sample.length === 0) continue;
+
+    const urlish = sample.filter((v) => /^(https?:\/\/|www\.|\/)/i.test(v)).length;
+    const ratio = urlish / sample.length;
+    if (ratio < 0.5) continue;
+
+    // A matching header breaks ties between two equally URL-looking columns.
+    const named = /url|link|page|address|destination|landing/i.test(sheet.columns[col]) ? 0.25 : 0;
+    const score = ratio + named;
+    if (score > bestScore) {
+      bestScore = score;
+      best = col;
+    }
+  }
+  return best;
+}
+
 export function columnValues(sheet: ParsedSheet, columnIndex: number): string[] {
   return sheet.rows.map((r) => r[columnIndex] ?? "");
 }

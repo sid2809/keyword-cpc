@@ -49,6 +49,15 @@ export type ResultRow = {
   prevLowTopMicros: number | null;
   prevAverageCpcMicros: number | null;
   prevAvgMonthlySearches: number | null;
+  /**
+   * Destination URLs from the uploaded sheet, distinct and in first-appearance
+   * order. Empty when the run was pasted or no URL column was designated.
+   *
+   * Intact mode has at most one — the row's own URL. Deduped mode can have
+   * several, because variants that collapsed into one canonical keyword may
+   * point at different pages; see the note in results.ts.
+   */
+  urls: string[];
 };
 
 export type RunSummary = {

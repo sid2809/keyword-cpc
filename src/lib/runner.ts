@@ -83,11 +83,12 @@ export async function createRun(input: {
     for (const batch of chunk(input.keywords, CopyBatch)) {
       const values: unknown[] = [];
       const tuples = batch.map((k, i) => {
-        values.push(runId, k.submitted, k.position);
-        return `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`;
+        values.push(runId, k.submitted, k.position, k.sourceRow);
+        return `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`;
       });
       await client.query(
-        `insert into run_keywords (run_id, submitted_text, position) values ${tuples.join(", ")}`,
+        `insert into run_keywords (run_id, submitted_text, position, source_row)
+         values ${tuples.join(", ")}`,
         values,
       );
     }
@@ -144,6 +145,8 @@ export async function executeRun(
     submitted: r.submitted_text,
     normalized: r.submitted_text.toLowerCase(),
     position: r.position,
+    // Not needed to rebuild chunk boundaries; only the ordering matters here.
+    sourceRow: null,
   }));
   const unique = distinctNormalized(parsed);
   const chunks = chunk(unique, CHUNK_SIZE);

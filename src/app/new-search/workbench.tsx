@@ -30,6 +30,8 @@ export function Workbench({
   const [text, setText] = useState("");
   const [sheet, setSheet] = useState<UploadedSheet | null>(null);
   const [keywordColumn, setKeywordColumn] = useState(0);
+  // -1 = no URL column. Optional throughout; pasted runs never have one.
+  const [urlColumn, setUrlColumn] = useState(-1);
   const [settings, setSettings] = useState<RunSettings>(defaultSettings);
   const [name, setName] = useState("");
   const [tag, setTag] = useState("");
@@ -37,14 +39,22 @@ export function Workbench({
   const [error, setError] = useState<string | null>(null);
   const [activeRun, setActiveRun] = useState<{ id: string; total: number } | null>(null);
 
-  // Same normalisation the server applies, so the live count is honest.
-  const keywords = useMemo(() => {
-    const raw =
+  /*
+   * The keyword column is sent to the server UNFILTERED, blanks included: the
+   * array index becomes run_keywords.source_row, which is how the export and
+   * the URL column find the right sheet row. Stripping blanks here would put
+   * every keyword after a gap on the wrong row.
+   */
+  const submittedValues = useMemo(
+    () =>
       tab === "paste"
-        ? text.split(/[\n\r,]+/)
-        : (sheet?.rows ?? []).map((r) => r[keywordColumn] ?? "");
-    return raw.map((s) => s.replace(/\s+/g, " ").trim()).filter((s) => s.length > 0);
-  }, [tab, text, sheet, keywordColumn]);
+        ? text.split(/[\n\r,]+/).map((s) => s.replace(/\s+/g, " ").trim())
+        : (sheet?.rows ?? []).map((r) => (r[keywordColumn] ?? "").replace(/\s+/g, " ").trim()),
+    [tab, text, sheet, keywordColumn],
+  );
+
+  // The visible count is of real keywords, so blanks are excluded here.
+  const keywords = useMemo(() => submittedValues.filter((s) => s.length > 0), [submittedValues]);
 
   const uniqueCount = useMemo(
     () => new Set(keywords.map((k) => k.toLowerCase())).size,
@@ -59,7 +69,7 @@ export function Workbench({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          keywords,
+          keywords: submittedValues,
           name,
           tag,
           settings,
@@ -71,6 +81,7 @@ export function Workbench({
                   columns: sheet.columns,
                   rows: sheet.rows,
                   keywordColumn,
+                  urlColumn: urlColumn >= 0 ? urlColumn : null,
                   hasHeader: sheet.hasHeader,
                 }
               : undefined,
@@ -147,6 +158,8 @@ export function Workbench({
               onSheet={setSheet}
               keywordColumn={keywordColumn}
               onKeywordColumn={setKeywordColumn}
+              urlColumn={urlColumn}
+              onUrlColumn={setUrlColumn}
             />
           </div>
         )}

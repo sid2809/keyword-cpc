@@ -206,6 +206,35 @@ product decision rather than a workaround.
   metrics. `metrics_cache` is left alone: it is shared across runs and keyed by
   keyword, so clearing it would slow every other run down for no benefit.
 
+### URL column (optional)
+
+When an uploaded sheet has a destination-URL column, designate it next to the
+keyword column and it becomes a column in the results table — toggleable like
+any other, truncated with the protocol stripped, opening in a new tab
+(`rel="noopener noreferrer"`, since the URLs come from an uploaded file) — and an
+option in the export column picker. It is auto-detected: a column is only
+offered if at least half its values actually look like URLs, so a "Link" column
+full of prose is not proposed on the strength of its header alone.
+
+Pasted runs and sheets without a URL column are completely unaffected — the
+column, its toggle and its export option simply do not appear.
+
+**In intact mode** each submitted row shows its own URL, so the same keyword
+listed twice against two pages shows both rows with their own destinations.
+
+**In deduped mode**, where variants collapse into one canonical keyword, the row
+carries **every distinct URL, in first-appearance order**: the table shows the
+first and flags the rest as `+n more` (the full list is in the tooltip), and the
+export writes them all, `|`-separated.
+
+That rule was chosen over "just show the first" because one keyword pointing at
+several pages is *itself* the finding this tool exists to surface — it is page
+feed cannibalisation, and silently dropping the other URLs would hide it. It is
+shown collapsed rather than expanded because the table is dense and the vast
+majority of keywords have exactly one URL; `+n more` costs nothing on those rows
+and flags the interesting ones. Identical URLs on duplicate rows collapse to one,
+so `+n more` only ever means genuinely different destinations.
+
 ### Comparing runs
 
 Tick two finished runs on the Runs page and choose **Compare**. Keywords are

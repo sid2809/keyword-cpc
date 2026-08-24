@@ -54,7 +54,12 @@ export async function GET() {
 type CreateBody = {
   /** Pasted text (paste tab). */
   text?: string;
-  /** Pre-split keyword list (upload tab). */
+  /**
+   * The keyword column exactly as it appears in the sheet, blanks included.
+   * Blanks must NOT be stripped by the caller: the array index becomes
+   * `run_keywords.source_row`, which is how the export and the URL column find
+   * the right sheet row.
+   */
   keywords?: string[];
   name?: string | null;
   tag?: string | null;
@@ -66,6 +71,8 @@ type CreateBody = {
     columns: string[];
     rows: string[][];
     keywordColumn: number;
+    /** Index of the URL column, or null when the user designated none. */
+    urlColumn?: number | null;
     hasHeader: boolean;
   };
 };
@@ -98,14 +105,15 @@ export async function POST(request: Request) {
 
   if (body.upload) {
     await query(
-      `insert into run_uploads (run_id, filename, columns, rows, keyword_column, has_header)
-       values ($1, $2, $3::jsonb, $4::jsonb, $5, $6)`,
+      `insert into run_uploads (run_id, filename, columns, rows, keyword_column, url_column, has_header)
+       values ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7)`,
       [
         runId,
         body.upload.filename,
         JSON.stringify(body.upload.columns),
         JSON.stringify(body.upload.rows),
         body.upload.keywordColumn,
+        body.upload.urlColumn ?? null,
         body.upload.hasHeader,
       ],
     );
