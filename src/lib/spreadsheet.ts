@@ -58,8 +58,51 @@ function normaliseGrid(grid: unknown[][]): ParsedSheet {
   return { columns, rows: dataRows, hasHeader, totalRows: dataRows.length };
 }
 
+/**
+ * Decodes an uploaded text file, detecting UTF-16.
+ *
+ * Google Ads exports the raw report as UTF-16 with a byte-order mark; opened
+ * and re-saved in a spreadsheet it becomes UTF-8, but the raw download does
+ * not. Read as UTF-8 it arrives as text interleaved with NUL bytes, which then
+ * reaches the keyword column.
+ *
+ * Detection is by BOM first, then by the NUL pattern that marks UTF-16 without
+ * one: ASCII-range text encoded UTF-16LE puts a NUL in every second byte.
+ */
+export function decodeTextFile(buffer: Buffer): string {
+  if (buffer.length >= 2) {
+    if (buffer[0] === 0xff && buffer[1] === 0xfe) return buffer.subarray(2).toString("utf16le");
+    // Node has no utf16be decoder, so swap the byte order and read as LE.
+    if (buffer[0] === 0xfe && buffer[1] === 0xff) return swap16(buffer.subarray(2)).toString("utf16le");
+  }
+
+  const sample = buffer.subarray(0, Math.min(buffer.length, 4096));
+  let evenNuls = 0;
+  let oddNuls = 0;
+  for (let i = 0; i < sample.length; i++) {
+    if (sample[i] === 0x00) {
+      if (i % 2 === 0) evenNuls += 1;
+      else oddNuls += 1;
+    }
+  }
+  const pairs = Math.floor(sample.length / 2);
+  if (pairs > 0) {
+    if (oddNuls / pairs > 0.3 && evenNuls === 0) return buffer.toString("utf16le");
+    if (evenNuls / pairs > 0.3 && oddNuls === 0) return swap16(buffer).toString("utf16le");
+  }
+
+  return buffer.toString("utf8");
+}
+
+function swap16(buf: Buffer): Buffer {
+  // Copy first: Buffer.swap16 mutates, and the caller's buffer is not ours.
+  const copy = Buffer.from(buf);
+  const even = copy.length % 2 === 1 ? copy.subarray(0, copy.length - 1) : copy;
+  return even.swap16();
+}
+
 export async function parseCsv(buffer: Buffer): Promise<ParsedSheet> {
-  const text = buffer.toString("utf8").replace(/^﻿/, "");
+  const text = decodeTextFile(buffer).replace(/^﻿/, "");
   const parsed = Papa.parse<string[]>(text, {
     skipEmptyLines: "greedy",
     // Read as arrays, not objects — the header row is decided by looksLikeHeader.

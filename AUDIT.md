@@ -8,6 +8,11 @@ explicitly requested as a security fix and is recorded as F4 below.
 (12/12 suites, 300+ individual assertions, against both the dev server and a
 real `next start` production build).
 
+**Update 2026-09-01:** an eighth defect (F8) surfaced in production on a real
+12,760-row Ads export — a class of collision this audit did not reach, because
+it needs thousands of dense near-variant keywords in one chunk to appear. Found,
+root-caused and fixed; the regression is now part of the suite.
+
 The harness lives in `scratch/audit/` — it is gitignored and therefore local
 only. Say the word if you want it committed as a permanent regression suite.
 
@@ -126,6 +131,49 @@ Fixed by recording `source_row`. **This audit found the trigger is more common
 than assumed:** an XLSX with **merged cells** produces exactly this shape — the
 non-top-left cells of a merge parse as empty. Merged header or category cells
 are ordinary in exported sheets.
+
+### F8 — Colliding cache keys inside one INSERT · **fixed 2026-09-01** · severity: high
+
+Found in production after the audit, on a real 12,760-row Google Ads export
+(run `b835ceca`). The run failed at 0 of 11,941 keywords with
+`ON CONFLICT DO UPDATE command cannot affect row a second time`.
+
+Postgres raises that when a single `INSERT ... ON CONFLICT` carries two rows
+mapping to the same conflict target. Localised by replaying chunk 0 against the
+API and checking each upsert's key set:
+
+| statement | conflict key | duplicates in chunk 0 |
+|---|---|---|
+| `metrics_cache` | `(canonical_text, settings_hash)` | **45** |
+| `keyword_metrics` | `(run_id, canonical_text)` | 0 |
+| `run_keywords` | *not an upsert* | n/a |
+
+**Root cause: Google's close-variant grouping is not a partition.** One result
+lists an alias that is *also* another result's own canonical text — e.g.
+`"dog names boy"` carried `"dog boy names"` as a close variant while
+`"dog boy names"` came back as its own result. The cache writes a row per alias,
+so both claimed the same key. This needs ~5,000 keywords with dense near-variants
+before it appears, which is why smaller runs never hit it.
+
+Corroborated by the recovery: chunk 1 resumed with "4000 cached", meaning the
+500-row cache batches before the colliding one had committed — exactly the
+partial-write signature of a failure inside `metrics_cache`.
+
+**Fix:** cache entries are deduplicated by conflict key before insert. When two
+results claim an alias, the one whose own canonical text *is* that alias wins —
+it is the authoritative row for that keyword rather than a near-variant of it.
+`dedupeByCanonical` already covered `keyword_metrics`; its contract is now
+documented as "must run before the upsert", not as a tidy-up.
+
+The user's run was resumed and completed 11,941/11,941 with every submitted row
+mapped and no duplicate keys.
+
+**Input handling added alongside** (requested with the fix): Ads match-type
+wrappers `"keyword"`, `[keyword]` and `""keyword""` are stripped, but only when
+they enclose the whole string and the interior has none of the same characters —
+so `"best of" 2025`, `[a] and [b]` and `grey's anatomy` are untouched. CSV
+decoding now detects UTF-16 by BOM and by the alternating-NUL signature, since
+raw Ads exports are UTF-16 and only become UTF-8 once re-saved.
 
 ---
 

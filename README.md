@@ -298,6 +298,19 @@ npm run run:keywords -- --resume <run-id>     # or --resume all
 Scripts run with `--conditions=react-server` so the `server-only` marker in
 `src/lib/*` resolves to a no-op instead of throwing outside Next.
 
+### Keyword normalisation
+
+Submitted keywords are stripped of characters Postgres cannot store (control
+characters, unpaired surrogates), whitespace-collapsed, and stripped of Google
+Ads match-type wrappers — `"keyword"`, `[keyword]` and the `""keyword""` that a
+CSV export leaves behind. A wrapper is only removed when it encloses the whole
+string and the interior has none of the same characters, so `"best of" 2025`,
+`[a] and [b]` and `grey's anatomy` come through untouched.
+
+CSV uploads detect UTF-16 by BOM and by the alternating-NUL signature. Google
+Ads downloads the raw report as UTF-16; it only becomes UTF-8 once you open and
+re-save it.
+
 ### How a run works
 
 1. Every submitted row is stored in `run_keywords` with its position —
@@ -309,7 +322,10 @@ Scripts run with `--conditions=react-server` so the `server-only` marker in
 3. Each chunk checks `metrics_cache` first. A payload fetched in the current
    calendar month is reused — Google refreshes this data monthly.
 4. Whatever is left goes to the API in one request, then results are written and
-   `chunk_cursor` advances. A crash mid-run leaves the cursor where it was, so
+   `chunk_cursor` advances. Both upserts deduplicate by conflict key first —
+   Google's close-variant grouping is not a partition, so one result can list an
+   alias that is another result's own canonical keyword, and two such rows in a
+   single `INSERT ... ON CONFLICT` is an error Postgres refuses outright. A crash mid-run leaves the cursor where it was, so
    resuming continues rather than restarting.
 
 Chunk size is 5,000 rather than the API's 10,000 ceiling because quota is

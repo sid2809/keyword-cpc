@@ -248,12 +248,36 @@ async function readCache(keywords: string[], hash: string): Promise<Map<string, 
 async function writeCache(results: HistoricalResult[], hash: string): Promise<void> {
   if (results.length === 0) return;
 
-  // Cache under every alias so a later run submitting "Cars" hits the same row.
-  const entries: { key: string; payload: HistoricalResult }[] = [];
+  /*
+   * Cache under every alias so a later run submitting "Cars" hits the same row.
+   *
+   * Google's close-variant grouping is NOT a partition: one result can list an
+   * alias that is ALSO another result's own canonical text. Observed on a real
+   * 12k-keyword run — "dog names boy" listed "dog boy names" as a variant while
+   * "dog boy names" came back as its own result, and 45 such collisions landed
+   * in a single chunk. Two rows with the same (canonical_text, settings_hash)
+   * in one statement is exactly what Postgres refuses with
+   * "ON CONFLICT DO UPDATE command cannot affect row a second time".
+   *
+   * So entries are deduplicated by conflict key before insert. When two results
+   * claim an alias, the one whose OWN canonical text is that alias wins: it is
+   * the authoritative row for that keyword, not a near-variant of it.
+   */
+  const byKey = new Map<string, HistoricalResult>();
   for (const r of results) {
-    const aliases = new Set<string>([r.text.toLowerCase(), ...r.closeVariants.map((v) => v.toLowerCase())]);
-    for (const alias of aliases) entries.push({ key: alias, payload: r });
+    const canonical = r.text.toLowerCase();
+    const aliases = new Set<string>([canonical, ...r.closeVariants.map((v) => v.toLowerCase())]);
+    for (const alias of aliases) {
+      const existing = byKey.get(alias);
+      if (existing === undefined) {
+        byKey.set(alias, r);
+        continue;
+      }
+      // Only displace the incumbent if this result actually owns the alias.
+      if (existing.text.toLowerCase() !== alias && alias === canonical) byKey.set(alias, r);
+    }
   }
+  const entries = [...byKey.entries()].map(([key, payload]) => ({ key, payload }));
 
   for (const batch of chunk(entries, 500)) {
     const values: unknown[] = [];
@@ -339,7 +363,13 @@ async function persistChunk(
 
     // Map submitted rows onto their canonical form. Anything in this chunk that
     // Google never mentioned is mapped to itself and will read as no-data.
-    const pairs = batch.map((normalized) => [normalized, canonicalFor.get(normalized) ?? normalized] as const);
+    // `batch` comes from distinctNormalized so keys are already unique; the Map
+    // makes that a guarantee of this function rather than of its caller.
+    const pairs = [
+      ...new Map(
+        batch.map((normalized) => [normalized, canonicalFor.get(normalized) ?? normalized] as const),
+      ).entries(),
+    ];
     for (const group of chunk(pairs, 500)) {
       const values: unknown[] = [runId];
       const tuples = group.map(([normalized, canonical], i) => {
@@ -365,7 +395,16 @@ async function persistChunk(
   }
 }
 
-/** Guards against the API ever returning two rows with the same canonical text. */
+/**
+ * Collapses results to one row per `keyword_metrics` conflict key
+ * (run_id, canonical_text). Two rows with the same key inside one INSERT is
+ * what triggers "ON CONFLICT DO UPDATE command cannot affect row a second
+ * time", so this must run before the upsert, not merely as a tidy-up.
+ *
+ * The API returned no such duplicates on the run that exposed the cache bug,
+ * but a batched upsert has no business relying on the upstream never repeating
+ * itself.
+ */
 function dedupeByCanonical(results: HistoricalResult[]): HistoricalResult[] {
   const byText = new Map<string, HistoricalResult>();
   for (const r of results) {

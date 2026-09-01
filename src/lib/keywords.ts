@@ -41,6 +41,52 @@ export function tidy(raw: string): string {
   );
 }
 
+/**
+ * Full normalisation for a submitted keyword: strip the characters Postgres
+ * cannot store, collapse whitespace, then remove match-type wrappers.
+ *
+ * Wrapper stripping happens AFTER whitespace collapsing so `" keyword "`
+ * reduces cleanly, and the result is tidied again because the interior may
+ * have had its own padding.
+ */
+export function normalizeSubmitted(raw: string): string {
+  return tidy(stripMatchTypeWrappers(tidy(raw)));
+}
+
+/**
+ * Strips Google Ads match-type wrappers from a keyword.
+ *
+ *   "keyword"    phrase match
+ *   [keyword]    exact match
+ *   ""keyword""  a doubled-quote CSV escape that survived the export
+ *
+ * A wrapper is only removed when it encloses the WHOLE string and the interior
+ * carries none of the same characters, so `"best of" 2025` and `[a] and [b]`
+ * are left alone — they are keywords that happen to contain the character, not
+ * wrapped ones. Apostrophes are never treated as wrappers, or "grey's anatomy"
+ * would be mangled.
+ *
+ * Layers are peeled iteratively (bounded) so `"[keyword]"` reduces fully.
+ */
+const QUOTE_WRAPPED = /^(["\u201C\u201D]+)([^"\u201C\u201D]*)(["\u201C\u201D]+)$/;
+const BRACKET_WRAPPED = /^\[+([^[\]]*)\]+$/;
+
+export function stripMatchTypeWrappers(raw: string): string {
+  let out = raw.trim();
+  // Four passes covers every nesting seen in Ads exports; the loop exits early
+  // as soon as a pass changes nothing.
+  for (let i = 0; i < 4; i++) {
+    const before = out;
+    const q = QUOTE_WRAPPED.exec(out);
+    if (q) out = q[2].trim();
+    const b = BRACKET_WRAPPED.exec(out);
+    if (b) out = b[1].trim();
+    if (out === before) break;
+  }
+  // Never let stripping empty a keyword that had content.
+  return out === "" ? raw.trim() : out;
+}
+
 export function normalize(raw: string): string {
   return tidy(raw).toLowerCase();
 }
@@ -56,7 +102,7 @@ export function normalize(raw: string): string {
 export function parseKeywordText(text: string): ParsedKeyword[] {
   const pieces = text
     .split(/[\n\r,]+/)
-    .map(tidy)
+    .map(normalizeSubmitted)
     .filter((s) => s.length > 0);
 
   return pieces.map((submitted, i) => ({
@@ -77,7 +123,7 @@ export function parseKeywordText(text: string): ParsedKeyword[] {
 export function parseKeywordList(values: string[]): ParsedKeyword[] {
   const out: ParsedKeyword[] = [];
   values.forEach((value, index) => {
-    const submitted = tidy(value ?? "");
+    const submitted = normalizeSubmitted(value ?? "");
     if (!submitted) return;
     out.push({
       submitted,
