@@ -247,14 +247,18 @@ export function ProgressBar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
     <div
-      className="h-1.5 w-full overflow-hidden rounded-full bg-subtle"
+      className="h-1.5 w-full overflow-hidden rounded-full bg-subtle shadow-[inset_0_1px_1px_rgb(0_0_0/0.06)]"
       role="progressbar"
       aria-valuenow={value}
       aria-valuemin={0}
       aria-valuemax={max}
     >
       <div
-        className="h-full rounded-full bg-accent transition-[width] duration-300 ease-out"
+        className={
+          "relative h-full overflow-hidden rounded-full bg-gradient-to-r from-accent to-accent-hover " +
+          "transition-[width] duration-[var(--dur-slow)] ease-[var(--ease-out-soft)] " +
+          (pct > 0 && pct < 100 ? "progress-sheen" : "")
+        }
         style={{ width: `${pct}%` }}
       />
     </div>

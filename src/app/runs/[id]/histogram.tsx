@@ -30,7 +30,7 @@ export function Histogram({
   return (
     <div>
       <div className="flex items-end gap-1" style={{ height: 96 }}>
-        {buckets.map((b) => {
+        {buckets.map((b, i) => {
           const isSelected = selected !== null && selected.from === b.from && selected.to === b.to;
           const midpoint = (b.from + b.to) / 2;
           const color = bandColorVar(bandFor(midpoint, bands));
@@ -52,12 +52,13 @@ export function Histogram({
                 data that isn't there.
               */}
               <span
-                className="w-full rounded-t-[3px] transition-[opacity,height] duration-150"
+                className="bar-grow w-full rounded-t-[3px] transition-[opacity,height,filter] duration-[var(--dur-base)] ease-[var(--ease-out-soft)] group-hover:brightness-110 group-focus-visible:brightness-110"
                 style={{
                   height: b.count === 0 ? 0 : `max(3px, ${heightPct}%)`,
                   backgroundColor: color,
                   opacity: selected === null || isSelected ? 1 : 0.3,
-                }}
+                  "--i": i,
+                } as React.CSSProperties}
               />
             </button>
           );

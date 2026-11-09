@@ -99,7 +99,7 @@ export function ExportModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="backdrop-in fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -110,7 +110,7 @@ export function ExportModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="export-title"
-        className="w-full max-w-md rounded-[var(--radius-card)] border border-border bg-raised shadow-overlay"
+        className="dialog-in w-full max-w-md rounded-[var(--radius-card)] border border-border bg-raised shadow-overlay"
       >
         <div className="border-b border-border p-5">
           <h2 id="export-title" className="text-base font-semibold text-text">

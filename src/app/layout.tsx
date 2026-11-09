@@ -15,8 +15,12 @@ export const metadata: Metadata = {
  *
  * Also sets data-sidebar the same way, so the sidebar opens at its remembered
  * width with no jump: collapsed (icons only) unless the user expanded it.
+ *
+ * And `data-js`, so CSS can hide count-up numbers until they start counting
+ * only when JavaScript is actually running (see CountUp, globals.css).
  */
 const THEME_SCRIPT = `
+document.documentElement.setAttribute('data-js', '');
 try {
   var t = localStorage.getItem('theme');
   if (t !== 'light' && t !== 'dark') {

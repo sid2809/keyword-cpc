@@ -16,12 +16,15 @@ import { CircleAlert, CircleCheck, X } from "lucide-react";
  */
 
 type Kind = "success" | "error";
-type Toast = { id: number; kind: Kind; message: string };
+/** `leaving`: dismissed and sliding out; removed once the exit animation ends. */
+type Toast = { id: number; kind: Kind; message: string; leaving?: boolean };
 
 /** Errors stay longer: they are more likely to need reading twice. */
 const DURATION_MS: Record<Kind, number> = { success: 4000, error: 8000 };
 /** Older toasts are dropped beyond this, so a burst cannot fill the screen. */
 const MAX_VISIBLE = 4;
+/** Matches .toast-out (--dur-fast, 120ms) plus a little slack. */
+const EXIT_MS = 160;
 
 let toasts: Toast[] = [];
 let nextId = 1;
@@ -33,8 +36,13 @@ function emit() {
 }
 
 function dismiss(id: number) {
-  toasts = toasts.filter((t) => t.id !== id);
+  if (!toasts.some((t) => t.id === id && !t.leaving)) return;
+  toasts = toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t));
   emit();
+  setTimeout(() => {
+    toasts = toasts.filter((t) => t.id !== id);
+    emit();
+  }, EXIT_MS);
 }
 
 function push(kind: Kind, message: string) {
@@ -74,7 +82,10 @@ export function Toaster() {
           key={t.id}
           // Errors interrupt; confirmations are read by the polite region.
           role={t.kind === "error" ? "alert" : undefined}
-          className="toast-in pointer-events-auto flex items-start gap-3 rounded-[var(--radius-card)] border border-border bg-raised p-3 shadow-overlay"
+          className={
+            (t.leaving ? "toast-out" : "toast-in") +
+            " pointer-events-auto flex items-start gap-3 rounded-[var(--radius-card)] border border-border bg-raised p-3 shadow-overlay"
+          }
         >
           {t.kind === "success" ? (
             <CircleCheck size={16} className="mt-0.5 shrink-0 text-heat-green" aria-hidden />

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowDown,
   ArrowUp,
   ArrowUpDown,
   ChevronLeft,
@@ -21,6 +20,7 @@ import {
   BTN_GHOST,
   BTN_SECONDARY,
   CARD,
+  CARD_HOVER,
   CONTROL,
   CONTROL_BASE,
   CONTROL_SM,
@@ -29,6 +29,7 @@ import {
   Skeleton,
   btn,
 } from "@/components/ui";
+import { CountUp } from "@/components/count-up";
 import { formatCompact, formatInt, formatMicros } from "@/lib/format";
 import { bandColorVar, bandFor, type HeatBands } from "@/lib/heat";
 import type { DedupMode, ResultsOverview, ResultsPage, RunSummary } from "@/lib/types";
@@ -632,7 +633,7 @@ export function ResultsView({
             {chips.map((c) => (
               <li
                 key={c.key}
-                className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-subtle pr-1 pl-3 text-xs font-medium text-text"
+                className="chip-in inline-flex h-7 items-center gap-1 rounded-full border border-border bg-subtle pr-1 pl-3 text-xs font-medium text-text"
               >
                 <span className="num">{c.label}</span>
                 <button
@@ -851,15 +852,16 @@ export function ResultsView({
                         </td>
                       </tr>
                     ))
-                  : rows.map((r) => {
+                  : rows.map((r, i) => {
                       const band = bandFor(r.highTopMicros, bands);
                       const key = resultRowKey(r);
                       const isSelected = selectedKeys.has(key);
                       return (
                         <tr
                           key={key}
+                          style={{ "--i": i } as React.CSSProperties}
                           className={
-                            "border-b border-border last:border-0 " +
+                            "row-in border-b border-border transition-colors duration-[var(--dur-fast)] last:border-0 " +
                             (isSelected ? "bg-accent-soft" : "hover:bg-subtle")
                           }
                         >
@@ -1126,17 +1128,16 @@ function StatCard({
   muted?: boolean;
 }) {
   return (
-    <div className={`${CARD} flex flex-col justify-between gap-1 p-4`}>
+    <div className={`${CARD} ${CARD_HOVER} flex flex-col justify-between gap-1 p-4`}>
       <dt className={`text-xs font-medium ${muted ? "text-text-muted" : "text-text-secondary"}`}>{label}</dt>
       <dd>
-        <span
+        <CountUp
+          value={value}
           className={
             "num block text-2xl font-semibold tracking-tight " +
             (accent ? "text-accent" : muted ? "text-text-secondary" : "text-text")
           }
-        >
-          {value}
-        </span>
+        />
         {sub && <span className="num mt-0.5 block text-xs text-text-muted">{sub}</span>}
       </dd>
     </div>
@@ -1191,7 +1192,8 @@ function Th({
 }) {
   const sortable = Boolean(onClick);
   const active = sortState === "ascending" || sortState === "descending";
-  const SortIcon = sortState === "ascending" ? ArrowUp : sortState === "descending" ? ArrowDown : ArrowUpDown;
+  // One up-arrow that turns over for descending, so switching direction rotates.
+  const SortIcon = active ? ArrowUp : ArrowUpDown;
   return (
     <th
       className={
@@ -1222,7 +1224,12 @@ function Th({
           <SortIcon
             size={13}
             aria-hidden
-            className={active ? "text-accent" : "opacity-0 transition-opacity group-hover:opacity-60 group-focus-visible:opacity-60"}
+            className={
+              active
+                ? "text-accent transition-transform duration-[var(--dur-base)] ease-[var(--ease-out-soft)] " +
+                  (sortState === "descending" ? "rotate-180" : "")
+                : "opacity-0 transition-opacity group-hover:opacity-60 group-focus-visible:opacity-60"
+            }
           />
         </button>
       ) : (

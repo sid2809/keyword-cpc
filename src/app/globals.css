@@ -382,6 +382,113 @@ body {
     }
   }
   .toast-in {
-    animation: toast-in 150ms ease-out;
+    animation: toast-in var(--dur-base) var(--ease-out-soft);
+  }
+}
+
+/*
+ * Step 2 motion: data and feedback. Every animation sits behind
+ * prefers-reduced-motion: no-preference, so with "reduce motion" on, things
+ * simply appear in their final state.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  /* Histogram bars grow up from the baseline, left to right (--i = index). */
+  @keyframes bar-grow {
+    from {
+      transform: scaleY(0);
+    }
+  }
+  .bar-grow {
+    transform-origin: bottom;
+    animation: bar-grow var(--dur-slow) var(--ease-out-soft) both;
+    animation-delay: calc(var(--i, 0) * 28ms + 80ms);
+  }
+
+  /* Table rows fade in when a page of results arrives. */
+  @keyframes row-in {
+    from {
+      opacity: 0;
+      translate: 0 3px;
+    }
+  }
+  .row-in {
+    animation: row-in var(--dur-base) var(--ease-out-soft) both;
+    animation-delay: calc(min(var(--i, 0), 12) * 14ms);
+  }
+
+  /* Filter chips pop in. */
+  @keyframes chip-in {
+    from {
+      opacity: 0;
+      scale: 0.9;
+    }
+  }
+  .chip-in {
+    animation: chip-in var(--dur-base) var(--ease-out-soft) both;
+  }
+
+  /* Dialogs: backdrop fades, panel scales up from 96%. */
+  @keyframes backdrop-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+      scale: 0.96;
+      translate: 0 6px;
+    }
+  }
+  .backdrop-in {
+    animation: backdrop-in var(--dur-base) ease-out both;
+  }
+  .dialog-in {
+    animation: dialog-in var(--dur-slow) var(--ease-out-soft) both;
+  }
+
+  /* Toasts slide out when dismissed (enter is .toast-in above). */
+  @keyframes toast-out {
+    to {
+      opacity: 0;
+      translate: 12px 0;
+    }
+  }
+  .toast-out {
+    animation: toast-out var(--dur-fast) ease-in both;
+  }
+
+  /* Progress bar: a soft highlight sweeps along the filled part while running. */
+  @keyframes progress-sheen {
+    from {
+      translate: -100% 0;
+    }
+    to {
+      translate: 250% 0;
+    }
+  }
+  .progress-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
+    animation: progress-sheen 1.6s var(--ease-in-out-soft) infinite;
+  }
+
+  /*
+   * Count-up numbers: hidden until the count starts, so the final value
+   * doesn't flash first. `data-js` is set on <html> by the pre-paint script;
+   * without JavaScript the rule doesn't apply. Failsafe: if the count never
+   * starts, the value fades in after 1.2s anyway.
+   */
+  @keyframes countup-failsafe {
+    to {
+      opacity: 1;
+    }
+  }
+  [data-js] [data-countup="pending"] {
+    opacity: 0;
+    animation: countup-failsafe 0s linear 1.2s forwards;
   }
 }
