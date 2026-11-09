@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, ViewTransition } from "react";
 import {
   ChartNoAxesColumn,
   GitCompareArrows,
@@ -22,8 +22,12 @@ import { logout } from "@/app/login/actions";
  * Opens COLLAPSED (icons only) by default; the choice is remembered in
  * localStorage under "sidebar". The `data-sidebar` attribute on <html> is set
  * before first paint by the inline script in layout.tsx, so the width never
- * jumps on load. Labels hide via CSS (globals.css), and every link keeps an
+ * jumps on load. Labels fade via CSS (globals.css), and every link keeps an
  * aria-label and tooltip so the collapsed rail stays usable.
+ *
+ * Motion: width glides on expand/collapse; the active marker (a named view
+ * transition) slides to the new item when the page changes; the sidebar itself
+ * is named `app-sidebar` so page transitions leave it still.
  */
 
 const NAV: { href: string; label: string; icon: LucideIcon; match: (path: string) => boolean }[] = [
@@ -42,10 +46,11 @@ export function Sidebar() {
   return (
     <aside
       aria-label="Main navigation"
-      className="sidebar-nav fixed inset-y-0 left-0 z-40 flex w-[var(--sidebar-width)] flex-col overflow-hidden border-r border-sidebar-border bg-sidebar motion-safe:transition-[width] motion-safe:duration-150"
+      style={{ viewTransitionName: "app-sidebar" }}
+      className="sidebar-nav fixed inset-y-0 left-0 z-40 flex w-[var(--sidebar-width)] flex-col overflow-hidden border-r border-sidebar-border bg-sidebar motion-safe:transition-[width] motion-safe:duration-[var(--dur-base)] motion-safe:ease-[var(--ease-out-soft)]"
     >
       <Link href="/" aria-label="Keyword CPC — New search" title="Keyword CPC" className="flex h-12 shrink-0 items-center gap-3 border-b border-sidebar-border px-3.5">
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[var(--radius-control)] bg-accent text-on-accent">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[var(--radius-control)] bg-gradient-to-br from-accent to-accent-hover text-on-accent shadow-[0_0_0_1px_rgb(255_255_255/0.08),0_4px_12px_-2px_rgb(99_102_241/0.5)]">
           <ChartNoAxesColumn size={16} strokeWidth={2.25} aria-hidden />
         </span>
         <span className="sidebar-label truncate text-sm font-semibold text-sidebar-text-strong">Keyword CPC</span>
@@ -65,10 +70,15 @@ export function Sidebar() {
                 ITEM +
                 " relative " +
                 (active
-                  ? "bg-sidebar-active text-sidebar-text-strong before:absolute before:inset-y-1.5 before:-left-2 before:w-0.5 before:rounded-full before:bg-sidebar-accent"
+                  ? "bg-sidebar-active text-sidebar-text-strong"
                   : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-strong")
               }
             >
+              {active && (
+                <ViewTransition name="nav-indicator">
+                  <span aria-hidden className="absolute inset-y-1.5 -left-2 w-0.5 rounded-full bg-sidebar-accent" />
+                </ViewTransition>
+              )}
               <Icon size={16} className={"shrink-0 " + (active ? "text-sidebar-accent" : "")} aria-hidden />
               <span className="sidebar-label truncate">{label}</span>
             </Link>

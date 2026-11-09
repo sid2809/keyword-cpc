@@ -48,8 +48,15 @@
   --heat-amber-soft: rgb(180 83 9 / 0.1);
   --heat-red-soft: rgb(185 28 28 / 0.08);
 
-  --elevation-card: 0 1px 2px rgb(0 0 0 / 0.04);
-  --elevation-overlay: 0 8px 24px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04);
+  /* Depth: three levels. card = resting surface, raised = hover/lifted,
+     overlay = dialogs and toasts. Shadows are tinted slightly toward the
+     indigo accent so they read as depth, not dirt. */
+  --elevation-card: 0 1px 2px rgb(24 24 48 / 0.05), 0 1px 1px rgb(24 24 48 / 0.03);
+  --elevation-raised: 0 1px 2px rgb(24 24 48 / 0.05), 0 6px 16px -4px rgb(24 24 48 / 0.1);
+  --elevation-overlay: 0 4px 12px rgb(24 24 48 / 0.06), 0 20px 48px -12px rgb(24 24 48 / 0.22);
+  /* Faint accent glow at the top-left of the header band. Capped so muted
+     text over it stays >= 4.5:1 (measured 0.07 gave 4.42). */
+  --band-glow: rgb(79 70 229 / 0.045);
 }
 
 /*
@@ -94,8 +101,12 @@
     --sidebar-accent: #a5b4fc;
     --band: #13131e;
 
-    --elevation-card: 0 1px 2px rgb(0 0 0 / 0.3);
-    --elevation-overlay: 0 8px 24px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.3);
+    /* Dark surfaces: shadows barely show, so each level also gets a 1px
+       top highlight that catches the "light" and separates the layers. */
+    --elevation-card: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 2px rgb(0 0 0 / 0.4);
+    --elevation-raised: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 8px 24px -6px rgb(0 0 0 / 0.7);
+    --elevation-overlay: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 24px 56px -12px rgb(0 0 0 / 0.8);
+    --band-glow: rgb(129 140 248 / 0.08);
   }
 }
 
@@ -134,8 +145,11 @@
   --sidebar-accent: #a5b4fc;
   --band: #13131e;
 
-  --elevation-card: 0 1px 2px rgb(0 0 0 / 0.3);
-  --elevation-overlay: 0 8px 24px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.3);
+  /* Keep in sync with the prefers-color-scheme block above. */
+  --elevation-card: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 2px rgb(0 0 0 / 0.4);
+  --elevation-raised: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 8px 24px -6px rgb(0 0 0 / 0.7);
+  --elevation-overlay: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 24px 56px -12px rgb(0 0 0 / 0.8);
+  --band-glow: rgb(129 140 248 / 0.08);
 }
 
 @theme inline {
@@ -172,7 +186,13 @@
   --color-band: var(--band);
 
   --shadow-card: var(--elevation-card);
+  --shadow-raised: var(--elevation-raised);
   --shadow-overlay: var(--elevation-overlay);
+
+  /* Motion: one easing for things settling into place, one for state
+     changes. Durations live in :root below (--dur-*). */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
 
   --font-sans: var(--font-primary), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "JetBrains Mono", monospace;
@@ -189,7 +209,18 @@ body {
   font-family: var(--font-primary), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* 150ms ease on hover + theme changes. */
+/*
+ * Motion durations. Everything animated uses one of these three, so the app
+ * moves at one consistent pace. Subtle by design: nothing here should ever
+ * make the user wait.
+ */
+:root {
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+}
+
+/* Colour changes on hover + theme changes. */
 @media (prefers-reduced-motion: no-preference) {
   body,
   button,
@@ -198,10 +229,74 @@ body {
   textarea,
   a {
     transition:
-      background-color 150ms ease,
-      border-color 150ms ease,
-      color 150ms ease,
-      box-shadow 150ms ease;
+      background-color var(--dur-fast) ease,
+      border-color var(--dur-fast) ease,
+      color var(--dur-fast) ease,
+      box-shadow var(--dur-base) var(--ease-out-soft),
+      transform var(--dur-fast) var(--ease-out-soft);
+  }
+}
+
+/*
+ * Page-to-page transitions (React <ViewTransition>, see page-transition.tsx).
+ * Old page fades out fast; the new one fades in while rising 6px. The sidebar
+ * and top bar are named and excluded, so they stay perfectly still.
+ */
+@keyframes page-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes page-rise-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+::view-transition-old(.page) {
+  animation: page-fade-out var(--dur-fast) ease-in both;
+}
+::view-transition-new(.page) {
+  animation: page-rise-in var(--dur-slow) var(--ease-out-soft) both;
+}
+/* Old and new pages differ in height; don't morph the box, just swap it. */
+::view-transition-group(.page) {
+  animation: none;
+}
+/* Unnamed content (the rest of the page) swaps instantly. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-group(app-sidebar),
+::view-transition-group(app-topbar) {
+  animation: none;
+  z-index: 100;
+}
+::view-transition-old(app-sidebar),
+::view-transition-old(app-topbar) {
+  display: none;
+}
+::view-transition-new(app-sidebar),
+::view-transition-new(app-topbar) {
+  animation: none;
+}
+/* Sidebar active marker slides to the new item. */
+::view-transition-group(nav-indicator) {
+  animation-duration: var(--dur-base);
+  animation-timing-function: var(--ease-out-soft);
+}
+/* Clicks during a transition reach the live page instead of being lost. */
+::view-transition {
+  pointer-events: none;
+}
+/* Reduced motion: keep fades, drop all movement. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-new(.page) {
+    animation: page-fade-out var(--dur-fast) ease-out reverse both;
+  }
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
   }
 }
 
@@ -241,8 +336,37 @@ body {
 [data-sidebar="expanded"] {
   --sidebar-width: var(--sidebar-expanded);
 }
+/*
+ * Labels fade instead of popping. `visibility` (not display:none) keeps them
+ * out of the accessibility tree and unfocusable when collapsed, and its
+ * delayed switch lets the fade-out finish before they disappear.
+ */
+.sidebar-label {
+  opacity: 1;
+  visibility: visible;
+}
 [data-sidebar="collapsed"] .sidebar-label {
-  display: none;
+  opacity: 0;
+  visibility: hidden;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sidebar-label {
+    transition:
+      opacity var(--dur-base) var(--ease-out-soft) 60ms,
+      visibility 0s linear 0s;
+  }
+  [data-sidebar="collapsed"] .sidebar-label {
+    transition:
+      opacity var(--dur-fast) ease-in,
+      visibility 0s linear var(--dur-fast);
+  }
+}
+
+/* Header band: tint fading downward plus a faint accent glow top-left. */
+.band-surface {
+  background:
+    radial-gradient(640px 220px at 0% 0%, var(--band-glow), transparent 70%),
+    linear-gradient(180deg, var(--band), color-mix(in oklab, var(--band) 55%, var(--bg)));
 }
 
 /* Toast entrance: 150ms slide + fade, skipped under reduced motion. */

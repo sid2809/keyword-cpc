@@ -2,8 +2,10 @@ import type { ReactNode } from "react";
 
 /**
  * Shared primitives so the design system is expressed once.
- * Flat and minimal: 1px borders, 6px controls, 8px cards, one very soft card
- * shadow, no gradients behind data, 150ms transitions (globals.css).
+ * Minimal with quiet depth: 1px borders, 6px controls, 8px cards, three
+ * shadow levels (card / raised / overlay), no gradients behind data, and
+ * subtle motion on the shared --dur-* timings (globals.css). All movement is
+ * `motion-safe:`, so the OS "reduce motion" setting turns it off.
  */
 
 /*
@@ -21,13 +23,16 @@ export const CONTROL_BASE =
 export const CONTROL = `${CONTROL_BASE} border-border-strong h-9 px-3`;
 export const CONTROL_SM = `${CONTROL_BASE} border-border-strong h-8 px-2.5`;
 
+/** Tactile press: buttons dip 2% while held (not when disabled). */
+export const PRESS = "motion-safe:enabled:active:scale-[0.98]";
+
 const BTN_CORE =
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-control)] " +
-  "font-medium disabled:opacity-50 disabled:cursor-not-allowed";
+  `font-medium disabled:opacity-50 disabled:cursor-not-allowed ${PRESS}`;
 
 const BTN_VARIANT = {
-  primary: "bg-accent text-on-accent shadow-card hover:bg-accent-hover",
-  secondary: "border border-border-strong bg-surface text-text shadow-card hover:bg-subtle",
+  primary: "bg-accent text-on-accent shadow-card hover:bg-accent-hover hover:shadow-raised",
+  secondary: "border border-border-strong bg-surface text-text shadow-card hover:bg-subtle hover:shadow-raised",
   ghost: "text-text-secondary hover:bg-subtle hover:text-text",
 } as const;
 
@@ -49,6 +54,14 @@ export const BTN_SECONDARY = btn("secondary");
 export const BTN_GHOST = btn("ghost");
 
 export const CARD = "rounded-[var(--radius-card)] border border-border bg-surface shadow-card";
+
+/**
+ * For cards the user points at or clicks: lifts 1px and gains the raised
+ * shadow on hover. Add alongside CARD.
+ */
+export const CARD_HOVER =
+  "transition-[box-shadow,translate,border-color] duration-[var(--dur-base)] ease-[var(--ease-out-soft)] " +
+  "hover:shadow-raised hover:border-border-strong motion-safe:hover:-translate-y-px";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`${CARD} ${className}`}>{children}</div>;
@@ -76,7 +89,7 @@ export function PageHeader({
   width?: "wide" | "narrow";
 }) {
   return (
-    <header className="border-b border-border bg-band">
+    <header className="band-surface border-b border-border">
       <div className={`mx-auto w-full ${width === "narrow" ? "max-w-3xl" : "max-w-7xl"} px-6 pt-7 pb-6`}>
         {breadcrumb && <div className="mb-2">{breadcrumb}</div>}
         <div className="flex flex-wrap items-start justify-between gap-4">
