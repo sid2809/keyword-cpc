@@ -6,6 +6,7 @@ import { RunBar, SettingsPanel } from "./settings-panel";
 import { UploadPanel, type UploadedSheet } from "./upload-panel";
 import { RunProgress } from "./run-progress";
 import { CircleAlert, ClipboardList, Upload } from "lucide-react";
+import { PillTrack } from "@/components/pill-track";
 import { formatInt } from "@/lib/format";
 import { btn } from "@/components/ui";
 import type { RunSettings } from "@/lib/types";
@@ -121,8 +122,9 @@ export function Workbench({
     <div className="flex flex-col gap-4">
       {/* Keywords — full width */}
       <section className="flex flex-col">
-        <div
+        <PillTrack
           className="mb-3 inline-flex self-start rounded-[var(--radius-control)] border border-border bg-subtle p-0.5"
+          pillClassName="rounded-[4px]"
           role="tablist"
           aria-label="Keyword source"
         >
@@ -133,6 +135,7 @@ export function Workbench({
                 key={t}
                 role="tab"
                 aria-selected={tab === t}
+                data-active={tab === t}
                 onClick={() => setTab(t)}
                 className={
                   "inline-flex items-center gap-2 rounded-[4px] px-3 py-1.5 text-sm font-medium capitalize " +
@@ -141,22 +144,26 @@ export function Workbench({
                     : "text-text-secondary hover:text-text")
                 }
               >
-                <Icon size={15} className={tab === t ? "text-accent" : ""} aria-hidden />
+                <Icon
+                  size={15}
+                  className={"transition-colors duration-[var(--dur-fast)] " + (tab === t ? "text-accent" : "")}
+                  aria-hidden
+                />
                 {t}
               </button>
             );
           })}
-        </div>
+        </PillTrack>
 
         {tab === "paste" ? (
-          <div className="flex flex-1 flex-col">
+          <div key="paste" className="fade-in flex flex-1 flex-col">
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               spellCheck={false}
               placeholder={"gardening tools\nraised garden bed\nlawn mower"}
               aria-label="Keywords"
-              className="min-h-[240px] flex-1 resize-y rounded-[var(--radius-card)] border border-border-strong bg-surface p-4 font-mono text-[13px] leading-6 text-text shadow-card placeholder:text-text-muted hover:border-text-muted/50"
+              className="min-h-[240px] flex-1 resize-y rounded-[var(--radius-card)] border border-border-strong bg-surface p-4 font-mono text-[13px] leading-6 text-text shadow-card placeholder:text-text-muted hover:border-text-muted/50 focus:border-accent/60 focus:shadow-raised"
             />
             <p className="mt-2 text-xs text-text-muted">
               One keyword per line, or comma separated. Up to {formatInt(threshold)} runs instantly;
@@ -164,7 +171,7 @@ export function Workbench({
             </p>
           </div>
         ) : (
-          <div className="flex flex-1 flex-col">
+          <div key="upload" className="fade-in flex flex-1 flex-col">
             <UploadPanel
               sheet={sheet}
               onSheet={setSheet}
@@ -200,7 +207,7 @@ export function Workbench({
         {error && (
           <div
             role="alert"
-            className="mb-2 flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-heat-red/30 bg-heat-red-soft px-3 py-2"
+            className="fade-in mb-2 flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-heat-red/30 bg-heat-red-soft px-3 py-2"
           >
             <span className="flex items-center gap-2 text-sm text-heat-red">
               <CircleAlert size={15} className="shrink-0" aria-hidden />

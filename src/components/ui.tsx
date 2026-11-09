@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PillTrack } from "./pill-track";
 
 /**
  * Shared primitives so the design system is expressed once.
@@ -142,10 +143,11 @@ export function SegmentedControl<T extends string>({
   name: string;
 }) {
   return (
-    <div
+    <PillTrack
       role="radiogroup"
       aria-label={name}
       className="inline-flex rounded-[var(--radius-control)] border border-border bg-subtle p-0.5"
+      pillClassName="rounded-[4px]"
     >
       {options.map((o) => {
         const active = o.value === value;
@@ -155,6 +157,7 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
+            data-active={active}
             title={o.title}
             onClick={() => onChange(o.value)}
             className={
@@ -168,7 +171,7 @@ export function SegmentedControl<T extends string>({
           </button>
         );
       })}
-    </div>
+    </PillTrack>
   );
 }
 

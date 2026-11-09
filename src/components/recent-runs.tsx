@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, Star } from "lucide-react";
-import { CARD, StatusBadge } from "./ui";
+import { CARD, CARD_HOVER, StatusBadge } from "./ui";
 import { formatDateTime, formatMicros } from "@/lib/format";
 import type { RunListItem } from "@/lib/types";
 
@@ -12,9 +12,13 @@ export function RecentRuns({ runs }: { runs: RunListItem[] }) {
     <section className="mt-8">
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold text-text">Recent runs</h2>
-        <Link href="/runs" className="inline-flex items-center gap-1 text-xs font-medium text-text-secondary hover:text-text">
+        <Link href="/runs" className="group inline-flex items-center gap-1 text-xs font-medium text-text-secondary hover:text-text">
           All runs
-          <ArrowRight size={13} aria-hidden />
+          <ArrowRight
+            size={13}
+            className="motion-safe:transition-transform motion-safe:duration-[var(--dur-fast)] motion-safe:group-hover:translate-x-0.5"
+            aria-hidden
+          />
         </Link>
       </div>
 
@@ -23,7 +27,7 @@ export function RecentRuns({ runs }: { runs: RunListItem[] }) {
           <Link
             key={run.id}
             href={`/runs/${run.id}`}
-            className={`${CARD} flex flex-col p-4 hover:border-border-strong hover:bg-subtle/50`}
+            className={`${CARD} ${CARD_HOVER} flex flex-col p-4`}
           >
             <p className="flex items-center gap-1.5 truncate text-sm font-medium text-text">
               {run.savedForever && (

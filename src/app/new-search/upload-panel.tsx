@@ -81,13 +81,17 @@ export function UploadPanel({
           }}
           className={
             "flex min-h-[240px] flex-1 flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border-2 border-dashed p-10 text-center " +
-            (dragging ? "border-accent bg-accent-soft" : "border-border-strong bg-surface")
+            "transition-[background-color,border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-out-soft)] " +
+            (dragging
+              ? "border-accent bg-accent-soft shadow-[0_0_0_4px_var(--accent-soft)]"
+              : "border-border-strong bg-surface hover:border-text-muted/60")
           }
         >
           <div
             className={
-              "grid h-11 w-11 place-items-center rounded-full border border-border bg-surface " +
-              (dragging ? "text-accent" : "text-text-secondary")
+              "grid h-11 w-11 place-items-center rounded-full border border-border bg-surface shadow-card " +
+              "transition-[translate,scale,color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-out-soft)] " +
+              (dragging ? "text-accent shadow-raised motion-safe:-translate-y-1 motion-safe:scale-105" : "text-text-secondary")
             }
             aria-hidden
           >
