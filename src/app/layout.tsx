@@ -1,14 +1,8 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
+import { fontClassNames } from "./fonts";
 import { ThemeSync } from "@/components/theme-sync";
 import { Toaster } from "@/components/toast";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-});
 
 export const metadata: Metadata = {
   title: "Keyword CPC",
@@ -56,7 +50,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       data-theme="light"
       data-sidebar="collapsed"
       suppressHydrationWarning
-      className={`${inter.variable} h-full antialiased`}
+      className={`${fontClassNames} h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />

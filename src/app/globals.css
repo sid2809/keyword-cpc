@@ -174,7 +174,7 @@
   --shadow-card: var(--elevation-card);
   --shadow-overlay: var(--elevation-overlay);
 
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-primary), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "JetBrains Mono", monospace;
 
   /* 6px controls, 8px cards */
@@ -186,7 +186,7 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-primary), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* 150ms ease on hover + theme changes. */
