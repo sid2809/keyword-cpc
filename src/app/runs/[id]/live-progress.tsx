@@ -55,13 +55,18 @@ export function LiveProgress({
     };
   }, [runId, router]);
 
+  const pct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+
   return (
     <div className="space-y-4">
       <Card className="p-6">
-        <h2 className="text-sm font-semibold text-text">
-          {status === "queued" ? "Queued…" : "Fetching keyword data…"}
-        </h2>
-        <p className="mt-1 text-sm text-text-secondary">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold text-text">
+            {status === "queued" ? "Queued…" : "Fetching keyword data…"}
+          </h2>
+          <span className="num text-sm font-medium text-text">{pct}%</span>
+        </div>
+        <p className="num mt-1 text-sm text-text-secondary">
           {formatInt(processed)} of {formatInt(total)} keywords
         </p>
         <div className="mt-4">
@@ -73,9 +78,17 @@ export function LiveProgress({
         </p>
       </Card>
 
-      {/* Skeleton of the results that are about to appear. */}
+      {/* Skeleton of the results that are about to appear, in their layout. */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-hidden>
+        {Array.from({ length: 4 }, (_, i) => (
+          <Card key={i} className="space-y-3 p-4">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-7 w-32" />
+          </Card>
+        ))}
+      </div>
       <Card className="space-y-3 p-5">
-        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-4 w-48" />
         <Skeleton className="h-24 w-full" />
       </Card>
       <Card className="space-y-2 p-5">

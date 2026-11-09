@@ -2,7 +2,8 @@ import "server-only";
 import { query } from "./db";
 import { withDefaults } from "./run-settings";
 import { isRunId } from "./ids";
-import type { MonthlyVolume, ResultRow, RunSettings, RunSummary } from "./types";
+import { iterateResultRows } from "./results-table";
+import type { ResultRow, RunSettings, RunSummary } from "./types";
 
 export type { ResultRow, RunSummary };
 
@@ -10,95 +11,11 @@ export type { ResultRow, RunSummary };
  * Reading a completed run back out, in either dedup mode (PLAN.md §1):
  *   - "intact"  — one row per submitted keyword, original order, metrics merged
  *   - "deduped" — one row per canonical keyword
+ *
+ * The results PAGE no longer uses getResults — it reads one page at a time
+ * through results-table.ts. getResults remains for the command-line script,
+ * which genuinely wants every row.
  */
-
-type MetricsDbRow = {
-  canonical_text: string;
-  average_cpc_micros: string | null;
-  avg_monthly_searches: string | null;
-  competition: string | null;
-  competition_index: number | null;
-  low_top_micros: string | null;
-  high_top_micros: string | null;
-  monthly_volumes: MonthlyVolume[] | null;
-  no_data: boolean;
-  prev_average_cpc_micros: string | null;
-  prev_avg_monthly_searches: string | null;
-  prev_low_top_micros: string | null;
-  prev_high_top_micros: string | null;
-};
-
-/** pg returns bigint as string to avoid precision loss; these fit in a double. */
-function big(v: string | null): number | null {
-  return v === null ? null : Number(v);
-}
-
-function toRow(
-  submitted: string,
-  position: number | null,
-  m: MetricsDbRow | undefined,
-  urls: string[] = [],
-): ResultRow {
-  if (!m) {
-    return {
-      submitted,
-      canonical: null,
-      position,
-      averageCpcMicros: null,
-      avgMonthlySearches: null,
-      competition: null,
-      competitionIndex: null,
-      lowTopMicros: null,
-      highTopMicros: null,
-      monthlyVolumes: null,
-      noData: true,
-      urls,
-      prevHighTopMicros: null,
-      prevLowTopMicros: null,
-      prevAverageCpcMicros: null,
-      prevAvgMonthlySearches: null,
-    };
-  }
-  return {
-    submitted,
-    canonical: m.canonical_text,
-    position,
-    averageCpcMicros: big(m.average_cpc_micros),
-    avgMonthlySearches: big(m.avg_monthly_searches),
-    competition: m.competition,
-    competitionIndex: m.competition_index,
-    lowTopMicros: big(m.low_top_micros),
-    highTopMicros: big(m.high_top_micros),
-    monthlyVolumes: m.monthly_volumes,
-    noData: m.no_data,
-    urls,
-    prevHighTopMicros: big(m.prev_high_top_micros),
-    prevLowTopMicros: big(m.prev_low_top_micros),
-    prevAverageCpcMicros: big(m.prev_average_cpc_micros),
-    prevAvgMonthlySearches: big(m.prev_avg_monthly_searches),
-  };
-}
-
-type UploadRow = { rows: string[][]; url_column: number | null };
-
-/**
- * Loads the uploaded sheet's URL column, if the user designated one.
- * Returns null for pasted runs and for sheets with no URL column, so every
- * caller degrades to "no URL column" rather than special-casing.
- */
-async function loadUrlSource(runId: string): Promise<UploadRow | null> {
-  const rows = await query<UploadRow>(
-    "select rows, url_column from run_uploads where run_id = $1 and url_column is not null",
-    [runId],
-  );
-  return rows[0] ?? null;
-}
-
-function urlAt(upload: UploadRow | null, sourceRow: number | null): string | null {
-  if (!upload || sourceRow === null || upload.url_column === null) return null;
-  const value = (upload.rows[sourceRow]?.[upload.url_column] ?? "").trim();
-  return value === "" ? null : value;
-}
 
 export async function getResults(
   runId: string,
@@ -109,134 +26,85 @@ export async function getResults(
   if (runRows.length === 0) throw new Error(`Run ${runId} not found`);
   const dedupMode = mode ?? withDefaults(runRows[0].settings).dedupMode;
 
-  const metrics = await query<MetricsDbRow>(
-    `select canonical_text, average_cpc_micros, avg_monthly_searches, competition,
-            competition_index, low_top_micros, high_top_micros, monthly_volumes, no_data,
-            prev_average_cpc_micros, prev_avg_monthly_searches,
-            prev_low_top_micros, prev_high_top_micros
-       from keyword_metrics where run_id = $1`,
-    [runId],
-  );
-  const byCanonical = new Map(metrics.map((m) => [m.canonical_text, m]));
-
-  const [upload, submitted] = await Promise.all([
-    loadUrlSource(runId),
-    query<{
-      submitted_text: string;
-      canonical_text: string | null;
-      position: number;
-      source_row: number | null;
-    }>(
-      `select submitted_text, canonical_text, position, source_row
-         from run_keywords where run_id = $1 order by position asc`,
-      [runId],
-    ),
-  ]);
-
-  if (dedupMode === "deduped") {
-    /*
-     * DEDUPED URL RULE: collect every DISTINCT URL of the submitted rows that
-     * collapsed into this canonical keyword, in first-appearance order.
-     *
-     * Discarding all but one would silently lose information, and one keyword
-     * pointing at several pages is itself the finding — that is page-feed
-     * cannibalisation, which is precisely what this tool exists to surface. The
-     * table shows the first and flags the rest rather than hiding them, and the
-     * export carries the full list.
-     */
-    const urlsByCanonical = new Map<string, string[]>();
-    for (const row of submitted) {
-      if (!row.canonical_text) continue;
-      const url = urlAt(upload, row.source_row);
-      if (url === null) continue;
-      const list = urlsByCanonical.get(row.canonical_text) ?? [];
-      if (!list.includes(url)) list.push(url);
-      urlsByCanonical.set(row.canonical_text, list);
-    }
-
-    return metrics
-      .map((m) => toRow(m.canonical_text, null, m, urlsByCanonical.get(m.canonical_text) ?? []))
-      .sort((a, b) => a.submitted.localeCompare(b.submitted));
+  const out: ResultRow[] = [];
+  for await (const batch of iterateResultRows(runId, dedupMode)) {
+    for (const { row } of batch) out.push(row);
   }
-
-  // Intact: replay the user's rows in their original order, each with its own URL.
-  return submitted.map((row) => {
-    const url = urlAt(upload, row.source_row);
-    return toRow(
-      row.submitted_text,
-      row.position,
-      row.canonical_text ? byCanonical.get(row.canonical_text) : undefined,
-      url === null ? [] : [url],
-    );
-  });
+  return out;
 }
 
 /**
  * Summary stats over the canonical (deduped) rows — weighting by volume across
  * duplicated submitted rows would double-count.
+ *
+ * Computed in Postgres. It used to load every metrics row into Node and loop;
+ * the formulas are unchanged:
+ *   - weighted: Σ(v·volume)/Σ(volume) over rows with data and a value, falling
+ *     back to the plain mean when every such row has zero volume;
+ *   - median: middle value, or the mean of the two middle values, rounded;
+ *   - totalMonthlyVolume: sum over ALL rows, no-data included (null = 0).
+ *
+ * Sums are exact `numeric` here, where the old JavaScript loop accumulated in
+ * doubles; on very large runs that can differ from the old figure in the last
+ * micro, in the direction of being correct.
  */
 export async function getRunSummary(runId: string): Promise<RunSummary> {
   if (!isRunId(runId)) throw new Error("Run not found");
-  const rows = await query<MetricsDbRow>(
-    `select canonical_text, average_cpc_micros, avg_monthly_searches, competition,
-            competition_index, low_top_micros, high_top_micros, monthly_volumes, no_data,
-            prev_average_cpc_micros, prev_avg_monthly_searches,
-            prev_low_top_micros, prev_high_top_micros
-       from keyword_metrics where run_id = $1`,
+
+  const weighted = (col: string) => `
+    case
+      when sum(m.avg_monthly_searches::numeric) filter (where not m.no_data and m.${col} is not null) > 0
+        then (sum(m.${col}::numeric * coalesce(m.avg_monthly_searches, 0))
+                filter (where not m.no_data and m.${col} is not null)
+              / sum(m.avg_monthly_searches::numeric)
+                filter (where not m.no_data and m.${col} is not null))::text
+      else (avg(m.${col}::numeric) filter (where not m.no_data and m.${col} is not null))::text
+    end`;
+
+  // percentile_cont(0.5) is the old median: the middle value, or the mean of
+  // the two middle values (computed as a + 0.5·(b − a), exact in float8 for
+  // micros-sized integers), rounded in JS exactly as before.
+  const median = (col: string) =>
+    `(percentile_cont(0.5) within group (order by m.${col}::float8)
+        filter (where not m.no_data and m.${col} is not null))`;
+
+  const [r] = await query<{
+    total: string;
+    with_data: string;
+    volume_total: string | null;
+    w_high: string | null;
+    w_low: string | null;
+    w_cpc: string | null;
+    med_high: number | null;
+    med_cpc: number | null;
+  }>(
+    `select count(*)::text                                                         as total,
+            count(*) filter (where not m.no_data and m.high_top_micros is not null)::text as with_data,
+            sum(m.avg_monthly_searches)::text                                       as volume_total,
+            ${weighted("high_top_micros")}                                          as w_high,
+            ${weighted("low_top_micros")}                                           as w_low,
+            ${weighted("average_cpc_micros")}                                       as w_cpc,
+            ${median("high_top_micros")}                                            as med_high,
+            ${median("average_cpc_micros")}                                         as med_cpc
+       from keyword_metrics m
+      where m.run_id = $1`,
     [runId],
   );
 
-  // "Has data" is judged on the primary metric — the top-of-page band.
-  const withData = rows.filter((r) => !r.no_data && r.high_top_micros !== null);
-
-  let volumeTotal = 0;
-  for (const r of rows) volumeTotal += big(r.avg_monthly_searches) ?? 0;
-
-  /**
-   * Volume-weighted mean over rows that actually carry the metric. Falls back
-   * to the unweighted mean when every keyword has zero volume, rather than
-   * dividing by zero and reporting nothing at all.
-   */
-  function weighted(pick: (r: MetricsDbRow) => number | null): number | null {
-    let numerator = 0;
-    let weight = 0;
-    const values: number[] = [];
-    for (const r of rows) {
-      if (r.no_data) continue;
-      const v = pick(r);
-      if (v === null) continue;
-      const volume = big(r.avg_monthly_searches) ?? 0;
-      values.push(v);
-      numerator += v * volume;
-      weight += volume;
-    }
-    if (weight > 0) return Math.round(numerator / weight);
-    if (values.length > 0) return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
-    return null;
-  }
-
-  function median(pick: (r: MetricsDbRow) => number | null): number | null {
-    const values = rows
-      .filter((r) => !r.no_data)
-      .map(pick)
-      .filter((v): v is number => v !== null)
-      .sort((a, b) => a - b);
-    if (values.length === 0) return null;
-    return values.length % 2 === 1
-      ? values[(values.length - 1) / 2]
-      : Math.round((values[values.length / 2 - 1] + values[values.length / 2]) / 2);
-  }
+  const total = Number(r.total);
+  const withData = Number(r.with_data);
+  const round = (v: string | number | null) => (v === null ? null : Math.round(Number(v)));
 
   return {
-    total: rows.length,
-    withData: withData.length,
-    noData: rows.length - withData.length,
-    weightedAvgHighTopMicros: weighted((r) => big(r.high_top_micros)),
-    medianHighTopMicros: median((r) => big(r.high_top_micros)),
-    weightedAvgLowTopMicros: weighted((r) => big(r.low_top_micros)),
-    weightedAvgCpcMicros: weighted((r) => big(r.average_cpc_micros)),
-    medianCpcMicros: median((r) => big(r.average_cpc_micros)),
-    totalMonthlyVolume: volumeTotal,
+    total,
+    withData,
+    noData: total - withData,
+    weightedAvgHighTopMicros: round(r.w_high),
+    medianHighTopMicros: round(r.med_high),
+    weightedAvgLowTopMicros: round(r.w_low),
+    weightedAvgCpcMicros: round(r.w_cpc),
+    medianCpcMicros: round(r.med_cpc),
+    totalMonthlyVolume: r.volume_total === null ? 0 : Number(r.volume_total),
   };
 }
 

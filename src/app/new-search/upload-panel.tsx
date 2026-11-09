@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { BTN_SECONDARY } from "@/components/ui";
+import { CircleAlert, FileSpreadsheet, Upload } from "lucide-react";
+import { BTN_SECONDARY, CONTROL, Skeleton, btn } from "@/components/ui";
 import { formatInt } from "@/lib/format";
 
 /**
@@ -79,16 +80,33 @@ export function UploadPanel({
             if (file) void upload(file);
           }}
           className={
-            "flex flex-1 flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed p-10 text-center " +
-            (dragging ? "border-accent bg-accent-soft" : "border-border")
+            "flex min-h-[240px] flex-1 flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border-2 border-dashed p-10 text-center " +
+            (dragging ? "border-accent bg-accent-soft" : "border-border-strong bg-surface")
           }
         >
-          <p className="text-sm font-medium text-text">
+          <div
+            className={
+              "grid h-11 w-11 place-items-center rounded-full border border-border bg-surface " +
+              (dragging ? "text-accent" : "text-text-secondary")
+            }
+            aria-hidden
+          >
+            {busy ? <FileSpreadsheet size={18} /> : <Upload size={18} />}
+          </div>
+          <p className="text-sm font-semibold text-text">
             {busy ? "Reading your file…" : "Drop a CSV or XLSX here"}
           </p>
-          <p className="text-sm text-text-secondary">
-            You&rsquo;ll pick which column holds the keywords next.
-          </p>
+          {busy ? (
+            <div className="w-full max-w-xs space-y-2" aria-hidden>
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-4/5" />
+              <Skeleton className="h-3 w-3/5" />
+            </div>
+          ) : (
+            <p className="text-sm text-text-secondary">
+              You&rsquo;ll pick which column holds the keywords next.
+            </p>
+          )}
           <button type="button" className={BTN_SECONDARY} onClick={() => inputRef.current?.click()} disabled={busy}>
             Choose a file
           </button>
@@ -104,7 +122,8 @@ export function UploadPanel({
             }}
           />
           {error && (
-            <p role="alert" className="text-sm text-heat-red">
+            <p role="alert" className="flex items-center gap-2 text-sm text-heat-red">
+              <CircleAlert size={15} className="shrink-0" aria-hidden />
               {error}
             </p>
           )}
@@ -115,17 +134,22 @@ export function UploadPanel({
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-text">{sheet.filename}</p>
-          <p className="text-xs text-text-muted">
-            {formatInt(sheet.totalRows)} rows · {sheet.columns.length} columns
-            {!sheet.hasHeader && " · no header row detected"}
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-border bg-surface p-3 shadow-card">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-control)] bg-accent-soft text-accent" aria-hidden>
+            <FileSpreadsheet size={17} />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-text">{sheet.filename}</p>
+            <p className="num text-xs text-text-muted">
+              {formatInt(sheet.totalRows)} rows · {sheet.columns.length} columns
+              {!sheet.hasHeader && " · no header row detected"}
+            </p>
+          </div>
         </div>
         <button
           type="button"
-          className={BTN_SECONDARY}
+          className={btn("secondary", "sm")}
           onClick={() => {
             onSheet(null);
             setError(null);
@@ -142,7 +166,7 @@ export function UploadPanel({
           </label>
           <select
             id="kw-col"
-            className="h-9 w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 text-sm text-text"
+            className={`${CONTROL} w-full`}
             value={keywordColumn}
             onChange={(e) => onKeywordColumn(Number(e.target.value))}
           >
@@ -160,7 +184,7 @@ export function UploadPanel({
           </label>
           <select
             id="url-col"
-            className="h-9 w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 text-sm text-text"
+            className={`${CONTROL} w-full`}
             value={urlColumn}
             onChange={(e) => onUrlColumn(Number(e.target.value))}
           >
@@ -176,35 +200,43 @@ export function UploadPanel({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-[var(--radius-card)] border border-border">
+      <div className="min-h-0 flex-1 overflow-auto rounded-[var(--radius-card)] border border-border bg-surface shadow-card">
         <table className="w-full border-collapse text-left">
-          <thead className="sticky top-0 z-10 bg-surface">
+          <thead className="sticky top-0 z-10 bg-subtle">
             <tr>
               {sheet.columns.map((c, i) => (
                 <th
                   key={`${c}-${i}`}
                   className={
-                    "whitespace-nowrap border-b border-border px-3 py-2 text-xs font-medium " +
+                    "whitespace-nowrap border-b border-border px-3 py-2.5 text-xs font-medium " +
                     (i === keywordColumn || i === urlColumn
                       ? "bg-accent-soft text-accent"
-                      : "text-text-secondary")
+                      : "bg-subtle text-text-secondary")
                   }
                 >
                   {c}
-                  {i === keywordColumn && <span className="ml-1.5 text-[10px] uppercase">keywords</span>}
-                  {i === urlColumn && <span className="ml-1.5 text-[10px] uppercase">url</span>}
+                  {i === keywordColumn && (
+                    <span className="ml-1.5 rounded-full bg-accent px-1.5 py-px text-[10px] font-semibold uppercase text-on-accent">
+                      keywords
+                    </span>
+                  )}
+                  {i === urlColumn && (
+                    <span className="ml-1.5 rounded-full bg-accent px-1.5 py-px text-[10px] font-semibold uppercase text-on-accent">
+                      url
+                    </span>
+                  )}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {sheet.preview.map((row, r) => (
-              <tr key={r} className="hover:bg-accent-soft/40">
+              <tr key={r} className="hover:bg-subtle">
                 {sheet.columns.map((_, c) => (
                   <td
                     key={c}
                     className={
-                      "max-w-[240px] truncate border-b border-border px-3 py-1.5 text-sm " +
+                      "max-w-[240px] truncate border-b border-border px-3 py-2 text-sm " +
                       (c === keywordColumn || c === urlColumn ? "text-text" : "text-text-secondary")
                     }
                   >

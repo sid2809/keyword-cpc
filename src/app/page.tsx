@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { Header } from "@/components/header";
+import { AppShell } from "@/components/app-shell";
+import { PageHeader } from "@/components/ui";
 import { RecentRuns } from "@/components/recent-runs";
 import { Workbench } from "./new-search/workbench";
 import { getSession } from "@/lib/session";
@@ -18,10 +19,12 @@ export default async function HomePage() {
   ]);
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
-        <h1 className="mb-5 text-lg font-semibold text-text">New search</h1>
+    <AppShell>
+      <PageHeader
+        title="New search"
+        description="Paste or upload keywords to pull top-of-page bids, CPC and search volume from Google Ads."
+      />
+      <main className="mx-auto w-full max-w-7xl flex-1 px-6 pt-6 pb-10">
         <Workbench
           defaultSettings={settings}
           threshold={appSettings.liveModeThreshold}
@@ -29,6 +32,6 @@ export default async function HomePage() {
         />
         <RecentRuns runs={runs} />
       </main>
-    </>
+    </AppShell>
   );
 }

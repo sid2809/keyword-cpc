@@ -55,6 +55,12 @@ export async function createRun(input: {
   name?: string | null;
   tag?: string | null;
   source: RunSource;
+  /**
+   * Destination URL for a keyword, looked up by its sheet row. Omit for
+   * pasted runs and sheets without a URL column. Stored on run_keywords.url so
+   * the results table can show a row's URL without loading the whole sheet.
+   */
+  urlForSourceRow?: (sourceRow: number) => string | null;
 }): Promise<string> {
   const settings = withDefaults(input.settings);
   if (input.keywords.length === 0) throw new Error("Cannot create a run with no keywords");
@@ -84,11 +90,14 @@ export async function createRun(input: {
     for (const batch of chunk(input.keywords, CopyBatch)) {
       const values: unknown[] = [];
       const tuples = batch.map((k, i) => {
-        values.push(runId, k.submitted, k.position, k.sourceRow);
-        return `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`;
+        const url =
+          input.urlForSourceRow && k.sourceRow !== null ? input.urlForSourceRow(k.sourceRow) : null;
+        values.push(runId, k.submitted, k.position, k.sourceRow, url);
+        const b = i * 5;
+        return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5})`;
       });
       await client.query(
-        `insert into run_keywords (run_id, submitted_text, position, source_row)
+        `insert into run_keywords (run_id, submitted_text, position, source_row, url)
          values ${tuples.join(", ")}`,
         values,
       );
@@ -201,6 +210,25 @@ export async function executeRun(
         fromApi: fetched.length,
       });
     }
+
+    /*
+     * Refresh planner statistics BEFORE the run is marked done, so the
+     * results page never queries a run Postgres has no statistics for.
+     * Without them the planner can estimate a freshly written run at ONE row
+     * and choose a nested loop over the whole run — measured: a 125,000-row
+     * run's results-page query ran for over five minutes. ANALYZE samples a
+     * fixed number of rows (~30,000 per table), so it costs the same however
+     * large the tables grow: ~0.5 s here.
+     *
+     * A failed ANALYZE must not fail a run whose data is complete; autovacuum
+     * will analyze the tables eventually.
+     */
+    await query("analyze run_keywords, keyword_metrics").catch((err) => {
+      console.error(
+        `[runner] analyze after run ${runId} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    });
 
     await query(
       `update runs

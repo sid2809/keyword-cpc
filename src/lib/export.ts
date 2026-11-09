@@ -2,9 +2,8 @@ import "server-only";
 import Papa from "papaparse";
 import writeXlsxFile from "write-excel-file/node";
 import { query } from "./db";
-import { getResults } from "./results";
+import { iterateResultRows } from "./results-table";
 import { microsToRupees } from "./format";
-import { resultRowKey } from "./row-key";
 import type { DedupMode, ResultRow } from "./types";
 
 /**
@@ -14,6 +13,12 @@ import type { DedupMode, ResultRow } from "./types";
  *   - in intact mode, the export carries the user's original rows and order
  *   - exporting a run that came from an uploaded sheet preserves the columns
  *     the user did not use as keywords
+ *
+ * Rows are read in batches (results-table.ts iterateResultRows) rather than
+ * all at once, and CSV is streamed to the client batch by batch, so a large
+ * run is never held in memory as both result rows and output. The bytes
+ * produced are identical to the previous all-at-once implementation — checked
+ * against its output on a 125,000-keyword run.
  */
 
 export const EXPORT_COLUMNS = [
@@ -93,17 +98,18 @@ async function getUpload(runId: string): Promise<UploadRow | null> {
   return rows[0] ?? null;
 }
 
-export type ExportGrid = { header: string[]; body: Cell[][] };
+export type ExportGrid = { header: string[]; body: AsyncIterable<Cell[][]> };
 
 /**
- * Builds the export grid. When the run came from an uploaded sheet AND the mode
- * is intact, the user's original columns lead and the metrics are appended, so
- * the file they get back is their file plus data.
+ * Builds the export as a header plus batches of body rows. When the run came
+ * from an uploaded sheet AND the mode is intact, the user's original columns
+ * lead and the metrics are appended, so the file they get back is their file
+ * plus data.
  */
 export async function buildExportGrid(
   runId: string,
   columns: ExportColumnKey[],
-  mode?: DedupMode,
+  mode: DedupMode,
   /**
    * Row keys to export (see row-key.ts). Omit to export every row. Rows keep
    * their natural order — the selection filters, it never reorders — so an
@@ -112,16 +118,18 @@ export async function buildExportGrid(
   selection?: string[],
 ): Promise<ExportGrid> {
   const selected = columns.length > 0 ? columns : DEFAULT_EXPORT_COLUMNS;
-  const all = await getResults(runId, mode);
-  // Build the lookup once — a 10,000-row export would otherwise rebuild the set
-  // per row.
-  const wanted = selection && selection.length > 0 ? new Set(selection) : null;
-  const rows = wanted ? all.filter((r) => wanted.has(resultRowKey(r))) : all;
   const metricColumns = EXPORT_COLUMNS.filter((c) => selected.includes(c.key));
+  const metricCells = (row: ResultRow) => metricColumns.map((c) => valueFor(row, c.key));
+
+  const batches = iterateResultRows(runId, mode, selection && selection.length > 0 ? selection : undefined);
+  // The header depends on whether there are any rows (as it always did), so
+  // read the first batch before deciding.
+  const first = await batches.next();
+  const firstBatch = first.done ? [] : first.value;
 
   const upload = mode === "deduped" ? null : await getUpload(runId);
 
-  if (upload && rows.length > 0 && rows[0].position !== null) {
+  if (upload && firstBatch.length > 0 && firstBatch[0].row.position !== null) {
     /*
      * Intact + uploaded: the user's original columns lead, metrics follow.
      *
@@ -131,41 +139,84 @@ export async function buildExportGrid(
      * once URLs are involved, the wrong destination page — to everything after
      * the gap.
      */
-    const sourceRows = await query<{ position: number; source_row: number | null }>(
-      "select position, source_row from run_keywords where run_id = $1",
-      [runId],
-    );
-    const sourceByPosition = new Map(sourceRows.map((r) => [r.position, r.source_row]));
+    const width = upload.columns.length;
+    const toCells = (batch: typeof firstBatch): Cell[][] =>
+      batch.map(({ row, sourceRow: mapped }) => {
+        // Runs created before source_row existed have null; fall back to
+        // position so their exports keep working exactly as they did, rather
+        // than coming back with every uploaded column blank.
+        const sourceRow = mapped ?? row.position;
+        const original = sourceRow !== null && sourceRow !== undefined ? (upload.rows[sourceRow] ?? []) : [];
+        const padded = [...original, ...Array(Math.max(0, width - original.length)).fill("")];
+        return [...padded, ...metricCells(row)];
+      });
 
-    const header = [...upload.columns, ...metricColumns.map((c) => c.label)];
-    const body = rows.map((row) => {
-      // Runs created before source_row existed have null; fall back to position
-      // so their exports keep working exactly as they did, rather than coming
-      // back with every uploaded column blank.
-      const mapped = row.position !== null ? sourceByPosition.get(row.position) : null;
-      const sourceRow = mapped ?? row.position;
-      const original = sourceRow !== null && sourceRow !== undefined ? (upload.rows[sourceRow] ?? []) : [];
-      const padded = [...original, ...Array(Math.max(0, upload.columns.length - original.length)).fill("")];
-      return [...padded, ...metricColumns.map((c) => valueFor(row, c.key))];
-    });
-    return { header, body };
+    return {
+      header: [...upload.columns, ...metricColumns.map((c) => c.label)],
+      body: (async function* () {
+        yield toCells(firstBatch);
+        for await (const batch of batches) yield toCells(batch);
+      })(),
+    };
   }
 
   return {
     header: metricColumns.map((c) => c.label),
-    body: rows.map((row) => metricColumns.map((c) => valueFor(row, c.key))),
+    body: (async function* () {
+      if (firstBatch.length > 0) yield firstBatch.map(({ row }) => metricCells(row));
+      for await (const batch of batches) yield batch.map(({ row }) => metricCells(row));
+    })(),
   };
 }
 
-export function gridToCsv(grid: ExportGrid): string {
-  return Papa.unparse([grid.header, ...grid.body.map((r) => r.map((c) => (c === null ? "" : c)))]);
+const CSV_NEWLINE = "\r\n";
+
+function csvRows(rows: Cell[][]): string {
+  return Papa.unparse(rows.map((r) => r.map((c) => (c === null ? "" : c))));
+}
+
+/**
+ * Streams the grid as CSV. Papa serialises each row independently and joins
+ * rows with CRLF, so serialising batch by batch and joining batches with CRLF
+ * yields exactly the bytes of one Papa.unparse over the whole grid.
+ */
+export function gridToCsvStream(grid: ExportGrid): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const iterator = grid.body[Symbol.asyncIterator]();
+  let headerSent = false;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        if (!headerSent) {
+          headerSent = true;
+          controller.enqueue(encoder.encode(csvRows([grid.header])));
+          return;
+        }
+        const next = await iterator.next();
+        if (next.done) {
+          controller.close();
+          return;
+        }
+        if (next.value.length > 0) controller.enqueue(encoder.encode(CSV_NEWLINE + csvRows(next.value)));
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+    async cancel() {
+      await iterator.return?.(undefined);
+    },
+  });
 }
 
 export async function gridToXlsx(grid: ExportGrid): Promise<Buffer> {
-  const sheet = [
+  // write-excel-file needs the whole sheet up front; cells are built batch by
+  // batch so the source rows can be released as they are converted.
+  const sheet: { value: string | number; fontWeight?: "bold" }[][] = [
     grid.header.map((h) => ({ value: h, fontWeight: "bold" as const })),
-    ...grid.body.map((r) => r.map((c) => ({ value: c === null ? "" : c }))),
   ];
+  for await (const batch of grid.body) {
+    for (const r of batch) sheet.push(r.map((c) => ({ value: c === null ? "" : c })));
+  }
   // v4 API: writeExcelFile(data).toBuffer() — the old { buffer: true } option
   // was removed.
   return (await writeXlsxFile(sheet).toBuffer()) as Buffer;

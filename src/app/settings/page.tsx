@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { Header } from "@/components/header";
-import { Card } from "@/components/ui";
+import { AppShell } from "@/components/app-shell";
+import { Card, PageHeader } from "@/components/ui";
 import { getSession } from "@/lib/session";
 import { envHealth } from "@/lib/env";
 import { getAppSettings } from "@/lib/app-settings";
@@ -17,10 +17,13 @@ export default async function SettingsPage() {
   const missing = vars.filter((v) => !v.present);
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">
-        <h1 className="mb-5 text-lg font-semibold text-text">Settings</h1>
+    <AppShell>
+      <PageHeader
+        width="narrow"
+        title="Settings"
+        description="Defaults for new searches, Google Ads credential health and environment."
+      />
+      <main className="mx-auto w-full max-w-3xl flex-1 px-6 pt-6 pb-10">
 
         <div className="space-y-4">
           <SettingsForm
@@ -69,7 +72,7 @@ export default async function SettingsPage() {
           </Card>
         </div>
       </main>
-    </>
+    </AppShell>
   );
 }
 

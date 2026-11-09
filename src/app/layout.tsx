@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeSync } from "@/components/theme-sync";
+import { Toaster } from "@/components/toast";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -17,6 +18,9 @@ export const metadata: Metadata = {
 /**
  * Sets data-theme before first paint so there is no flash of the wrong theme
  * (§5). localStorage wins; otherwise follow the OS preference.
+ *
+ * Also sets data-sidebar the same way, so the sidebar opens at its remembered
+ * width with no jump: collapsed (icons only) unless the user expanded it.
  */
 const THEME_SCRIPT = `
 try {
@@ -27,6 +31,14 @@ try {
   document.documentElement.setAttribute('data-theme', t);
 } catch (e) {
   document.documentElement.setAttribute('data-theme', 'light');
+}
+try {
+  document.documentElement.setAttribute(
+    'data-sidebar',
+    localStorage.getItem('sidebar') === 'expanded' ? 'expanded' : 'collapsed'
+  );
+} catch (e) {
+  document.documentElement.setAttribute('data-sidebar', 'collapsed');
 }
 `.trim();
 
@@ -42,6 +54,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       data-theme="light"
+      data-sidebar="collapsed"
       suppressHydrationWarning
       className={`${inter.variable} h-full antialiased`}
     >
@@ -51,6 +64,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <ThemeSync />
         {children}
+        <Toaster />
       </body>
     </html>
   );

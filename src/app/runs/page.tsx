@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Header } from "@/components/header";
-import { BTN_PRIMARY, Card, EmptyState } from "@/components/ui";
+import { AppShell } from "@/components/app-shell";
+import { BTN_PRIMARY, Card, EmptyState, PageHeader } from "@/components/ui";
 import { getSession } from "@/lib/session";
 import { listRuns } from "@/lib/run-queries";
 import { RunsTable } from "./runs-table";
@@ -15,32 +15,43 @@ export default async function RunsPage({ searchParams }: PageProps<"/runs">) {
   const runs = await listRuns(50, savedOnly);
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold text-text">Runs</h1>
-          <div className="flex gap-1">
+    <AppShell>
+      <PageHeader
+        title="Runs"
+        description="Every search you have run. Tick two finished runs to compare them."
+        actions={
+          <nav
+            aria-label="Filter runs"
+            className="inline-flex rounded-[var(--radius-control)] border border-border bg-subtle p-0.5"
+          >
             <Link
               href="/runs"
+              aria-current={savedOnly ? undefined : "page"}
               className={
-                "rounded-[var(--radius-control)] px-3 py-1.5 text-xs font-medium " +
-                (savedOnly ? "text-text-secondary hover:text-accent" : "bg-accent-soft text-accent")
+                "rounded-[4px] px-3 py-1 text-xs font-medium " +
+                (savedOnly
+                  ? "text-text-secondary hover:text-text"
+                  : "bg-surface text-text shadow-card ring-1 ring-border")
               }
             >
               All
             </Link>
             <Link
               href="/runs?saved=1"
+              aria-current={savedOnly ? "page" : undefined}
               className={
-                "rounded-[var(--radius-control)] px-3 py-1.5 text-xs font-medium " +
-                (savedOnly ? "bg-accent-soft text-accent" : "text-text-secondary hover:text-accent")
+                "rounded-[4px] px-3 py-1 text-xs font-medium " +
+                (savedOnly
+                  ? "bg-surface text-text shadow-card ring-1 ring-border"
+                  : "text-text-secondary hover:text-text")
               }
             >
               ★ Saved
             </Link>
-          </div>
-        </div>
+          </nav>
+        }
+      />
+      <main className="mx-auto w-full max-w-7xl flex-1 px-6 pt-6 pb-10">
 
         {runs.length === 0 ? (
           <Card>
@@ -62,6 +73,6 @@ export default async function RunsPage({ searchParams }: PageProps<"/runs">) {
           <RunsTable runs={runs} />
         )}
       </main>
-    </>
+    </AppShell>
   );
 }

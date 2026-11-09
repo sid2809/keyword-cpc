@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Header } from "@/components/header";
-import { BTN_PRIMARY, Card, EmptyState } from "@/components/ui";
+import { GitCompareArrows } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
+import { BTN_PRIMARY, Card, EmptyState, PageHeader, btn } from "@/components/ui";
 import { getSession } from "@/lib/session";
 import { compareRuns } from "@/lib/compare";
 import { formatCompact, formatDateTime, formatInt, formatMicros } from "@/lib/format";
@@ -14,16 +15,19 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
   const aId = typeof params.a === "string" ? params.a : null;
   const bId = typeof params.b === "string" ? params.b : null;
 
-  const result = aId && bId && aId !== bId ? await compareRuns(aId, bId) : null;
+  // ?page=N — whole numbers from 1; anything else means page 1.
+  const pageParam = typeof params.page === "string" && /^\d+$/.test(params.page) ? Number(params.page) : 1;
+
+  const result = aId && bId && aId !== bId ? await compareRuns(aId, bId, { page: pageParam }) : null;
 
   if (!result) {
     return (
-      <>
-        <Header />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
-          <h1 className="mb-5 text-lg font-semibold text-text">Compare runs</h1>
+      <AppShell>
+        <PageHeader title="Compare runs" description="Side-by-side change in top-of-page bids between two runs." />
+        <main className="mx-auto w-full max-w-7xl flex-1 px-6 pt-6 pb-10">
           <Card>
             <EmptyState
+              icon={<GitCompareArrows size={18} />}
               title="Pick two runs to compare"
               body={
                 aId && bId
@@ -38,7 +42,7 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
             />
           </Card>
         </main>
-      </>
+      </AppShell>
     );
   }
 
@@ -49,20 +53,29 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
       : null;
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
-        <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="text-lg font-semibold text-text">
+    <AppShell>
+      <PageHeader
+        breadcrumb={
+          <nav aria-label="Breadcrumb" className="text-xs text-text-secondary">
+            <Link href="/runs" className="font-medium hover:text-text">
+              All runs
+            </Link>
+            <span className="mx-1.5 text-text-muted" aria-hidden>
+              /
+            </span>
+            <span className="text-text-muted">Compare</span>
+          </nav>
+        }
+        title={
+          <>
             <Link href={`/runs/${a.id}`} className="hover:text-accent">{a.name}</Link>
             <span className="mx-2 text-text-muted">→</span>
             <Link href={`/runs/${b.id}`} className="hover:text-accent">{b.name}</Link>
-          </h1>
-          <Link href="/runs" className="text-xs font-medium text-accent hover:underline">
-            All runs
-          </Link>
-        </div>
-
+          </>
+        }
+        description="Side-by-side change in top-of-page bids between two runs."
+      />
+      <main className="mx-auto w-full max-w-7xl flex-1 px-6 pt-6 pb-10">
         <Card className="mb-4 p-5">
           <dl className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
             <Stat label="In both runs" value={formatInt(result.inBoth)} />
@@ -140,9 +153,71 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
               </tbody>
             </table>
           </div>
+          <ComparePagination
+            aId={a.id}
+            bId={b.id}
+            page={result.page}
+            pageSize={result.pageSize}
+            total={result.total}
+          />
         </Card>
       </main>
-    </>
+    </AppShell>
+  );
+}
+
+/**
+ * Page links for the comparison table. Plain links (no client code): each page
+ * is its own URL, so it can be bookmarked and the back button works.
+ */
+function ComparePagination({
+  aId,
+  bId,
+  page,
+  pageSize,
+  total,
+}: {
+  aId: string;
+  bId: string;
+  page: number;
+  pageSize: number;
+  total: number;
+}) {
+  if (total === 0) return null;
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  const first = (page - 1) * pageSize + 1;
+  const last = Math.min(total, page * pageSize);
+  const href = (p: number) => `/compare?a=${aId}&b=${bId}&page=${p}`;
+
+  const link = (target: number, label: string, text: string, disabled: boolean) =>
+    disabled ? (
+      <span aria-disabled="true" className={`${btn("secondary", "icon")} pointer-events-none opacity-50`}>
+        {text}
+      </span>
+    ) : (
+      <Link href={href(target)} aria-label={label} className={btn("secondary", "icon")}>
+        {text}
+      </Link>
+    );
+
+  return (
+    <nav
+      aria-label="Comparison pages"
+      className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-2.5"
+    >
+      <p className="text-xs text-text-secondary">
+        Rows {formatInt(first)}–{formatInt(last)} of {formatInt(total)}
+      </p>
+      <div className="flex items-center gap-2">
+        {link(1, "First page", "«", page <= 1)}
+        {link(page - 1, "Previous page", "‹", page <= 1)}
+        <span className="text-xs text-text-secondary">
+          Page {formatInt(page)} of {formatInt(lastPage)}
+        </span>
+        {link(page + 1, "Next page", "›", page >= lastPage)}
+        {link(lastPage, "Last page", "»", page >= lastPage)}
+      </div>
+    </nav>
   );
 }
 

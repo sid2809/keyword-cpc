@@ -26,26 +26,41 @@ export function tertileBands(cpcMicros: (number | null)[]): HeatBands | null {
   const values = cpcMicros.filter((v): v is number => v !== null && Number.isFinite(v)).sort((a, b) => a - b);
   if (values.length === 0) return null;
 
-  // With one or two distinct values, tertiles are meaningless; treat everything
-  // as "mid" rather than inventing a spread.
-  const distinct = new Set(values);
-  if (distinct.size < 3) {
-    return { lower: values[0] - 1, upper: values[values.length - 1] + 1, custom: false };
-  }
-
-  return {
-    lower: quantile(values, 1 / 3),
-    upper: quantile(values, 2 / 3),
-    custom: false,
-  };
+  return tertilesFromStats({
+    distinct: new Set(values).size,
+    min: values[0],
+    max: values[values.length - 1],
+    p33: quantileRaw(values, 1 / 3),
+    p67: quantileRaw(values, 2 / 3),
+  });
 }
 
-function quantile(sorted: number[], q: number): number {
+/**
+ * The tertile rule from summary statistics, so the server can compute the
+ * statistics in SQL (percentile_cont uses the same linear interpolation as
+ * quantileRaw) without shipping every value to the browser.
+ */
+export function tertilesFromStats(s: {
+  distinct: number;
+  min: number;
+  max: number;
+  /** Unrounded linear-interpolation quantiles at 1/3 and 2/3. */
+  p33: number;
+  p67: number;
+}): HeatBands {
+  // With one or two distinct values, tertiles are meaningless; treat everything
+  // as "mid" rather than inventing a spread.
+  if (s.distinct < 3) return { lower: s.min - 1, upper: s.max + 1, custom: false };
+  return { lower: Math.round(s.p33), upper: Math.round(s.p67), custom: false };
+}
+
+/** Linear-interpolation quantile, unrounded. */
+function quantileRaw(sorted: number[], q: number): number {
   const pos = (sorted.length - 1) * q;
   const base = Math.floor(pos);
   const rest = pos - base;
   const next = sorted[base + 1];
-  return next === undefined ? sorted[base] : Math.round(sorted[base] + rest * (next - sorted[base]));
+  return next === undefined ? sorted[base] : sorted[base] + rest * (next - sorted[base]);
 }
 
 export function bandFor(cpcMicros: number | null, bands: HeatBands | null): HeatBand | null {
@@ -88,15 +103,14 @@ export function histogram(cpcMicros: (number | null)[], targetBuckets = 12): Buc
   const values = cpcMicros.filter((v): v is number => v !== null && Number.isFinite(v));
   if (values.length === 0) return [];
 
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  if (max === min) return [{ from: min, to: min + 1, count: values.length }];
+  // A reduce, not Math.max(...values): spreading 100k+ arguments overflows the
+  // call stack.
+  const max = values.reduce((a, b) => (b > a ? b : a), values[0]);
+  const min = values.reduce((a, b) => (b < a ? b : a), values[0]);
+  const layout = histogramLayout(min, max, targetBuckets);
+  if (layout.kind === "single") return [{ from: min, to: min + 1, count: values.length }];
 
-  const rawWidth = (max - min) / targetBuckets;
-  const width = niceStep(rawWidth);
-  const start = Math.floor(min / width) * width;
-  const bucketCount = Math.max(1, Math.ceil((max - start) / width) + (max % width === 0 ? 1 : 0));
-
+  const { start, width, bucketCount } = layout;
   const buckets: Bucket[] = Array.from({ length: bucketCount }, (_, i) => ({
     from: start + i * width,
     to: start + (i + 1) * width,
@@ -108,6 +122,23 @@ export function histogram(cpcMicros: (number | null)[], targetBuckets = 12): Buc
     buckets[i].count += 1;
   }
   return buckets;
+}
+
+export type HistogramLayout =
+  | { kind: "single" }
+  | { kind: "buckets"; start: number; width: number; bucketCount: number };
+
+/**
+ * Bucket geometry from the range alone. Split out of histogram() so the server
+ * can count values per bucket in SQL with exactly the same edges.
+ */
+export function histogramLayout(min: number, max: number, targetBuckets = 12): HistogramLayout {
+  if (max === min) return { kind: "single" };
+  const rawWidth = (max - min) / targetBuckets;
+  const width = niceStep(rawWidth);
+  const start = Math.floor(min / width) * width;
+  const bucketCount = Math.max(1, Math.ceil((max - start) / width) + (max % width === 0 ? 1 : 0));
+  return { kind: "buckets", start, width, bucketCount };
 }
 
 /** Rounds a bucket width up to 1, 2, 2.5 or 5 × a power of ten (in micros). */

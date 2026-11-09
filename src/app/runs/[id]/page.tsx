@@ -1,11 +1,13 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { Header } from "@/components/header";
-import { StatusBadge } from "@/components/ui";
+import { AppShell } from "@/components/app-shell";
+import { PageHeader, StatusBadge } from "@/components/ui";
 import { getSession } from "@/lib/session";
 import { getRun } from "@/lib/runner";
 import { isRunId } from "@/lib/compare";
-import { getResults, getRunSummary } from "@/lib/results";
+import { getRunSummary } from "@/lib/results";
+import { getResultsOverview, getResultsPage } from "@/lib/results-table";
+import { DEFAULT_PAGE_SIZE, EMPTY_FILTERS } from "@/lib/results-params";
 import { query } from "@/lib/db";
 import { withDefaults } from "@/lib/run-settings";
 import { formatDateTime } from "@/lib/format";
@@ -27,9 +29,21 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
   const settings = withDefaults(run.settings);
   const finished = run.status === "done";
 
-  const [rows, summary, uploadRows] = finished
+  /*
+   * Only the FIRST PAGE of rows is rendered here; the table fetches further
+   * pages from /api/runs/:id/results as the user pages, filters and sorts.
+   * Rendering every row made a 125,000-keyword run a 308 MB response the
+   * browser could not draw.
+   */
+  const [initialPage, overview, summary, uploadRows] = finished
     ? await Promise.all([
-        getResults(id, settings.dedupMode),
+        getResultsPage(id, settings.dedupMode, {
+          filters: EMPTY_FILTERS,
+          sort: null,
+          page: 1,
+          pageSize: DEFAULT_PAGE_SIZE,
+        }),
+        getResultsOverview(id, settings.dedupMode),
         getRunSummary(id),
         query<{ n: string; has_urls: boolean }>(
           `select count(*)::text as n,
@@ -38,43 +52,46 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
           [id],
         ),
       ])
-    : [[], null, [{ n: "0", has_urls: false }]];
+    : [null, null, null, [{ n: "0", has_urls: false }]];
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold text-text">
-                {run.name ?? `Run ${run.id.slice(0, 8)}`}
-              </h1>
-              <StatusBadge status={run.status} />
-            </div>
-            <p className="mt-0.5 text-xs text-text-muted">
-              {formatDateTime(run.created_at.toISOString())}
-              {run.tag && <> · {run.tag}</>} · {settings.dedupMode === "intact" ? "list kept intact" : "deduped"} ·{" "}
-              {settings.monthsBack}-month history
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <RunActions
-              runId={run.id}
-              savedForever={run.saved_forever}
-              canRefresh={run.status === "done" || run.status === "failed"}
-              refreshedAt={run.refreshed_at ? run.refreshed_at.toISOString() : null}
-            />
-            <Link href="/runs" className="text-xs font-medium text-accent hover:underline">
+    <AppShell>
+      <PageHeader
+        breadcrumb={
+          <nav aria-label="Breadcrumb" className="text-xs text-text-secondary">
+            <Link href="/runs" className="font-medium hover:text-text">
               All runs
             </Link>
-          </div>
-        </div>
-
-        {finished && summary ? (
+            <span className="mx-1.5 text-text-muted" aria-hidden>
+              /
+            </span>
+            <span className="text-text-muted">{run.name ?? `Run ${run.id.slice(0, 8)}`}</span>
+          </nav>
+        }
+        title={run.name ?? `Run ${run.id.slice(0, 8)}`}
+        meta={<StatusBadge status={run.status} />}
+        description={
+          <>
+            {formatDateTime(run.created_at.toISOString())}
+            {run.tag && <> · {run.tag}</>} · {settings.dedupMode === "intact" ? "list kept intact" : "deduped"} ·{" "}
+            {settings.monthsBack}-month history
+          </>
+        }
+        actions={
+          <RunActions
+            runId={run.id}
+            savedForever={run.saved_forever}
+            canRefresh={run.status === "done" || run.status === "failed"}
+            refreshedAt={run.refreshed_at ? run.refreshed_at.toISOString() : null}
+          />
+        }
+      />
+      <main className="mx-auto w-full max-w-7xl flex-1 px-6 pt-6 pb-10">
+        {finished && summary && initialPage && overview ? (
           <ResultsView
             runId={run.id}
-            rows={rows}
+            initialPage={initialPage}
+            overview={overview}
             summary={summary}
             mode={settings.dedupMode}
             hasUpload={Number(uploadRows[0]?.n ?? 0) > 0}
@@ -92,6 +109,6 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
           <LiveProgress runId={run.id} initialProcessed={run.processed} total={run.total_keywords} />
         )}
       </main>
-    </>
+    </AppShell>
   );
 }

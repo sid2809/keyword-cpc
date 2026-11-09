@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { BTN_SECONDARY } from "@/components/ui";
+import { RefreshCw, Star, Trash2 } from "lucide-react";
+import { BTN_SECONDARY, btn } from "@/components/ui";
+import { toast } from "@/components/toast";
 import { removeRun, startRefresh, toggleSavedForever } from "@/app/actions";
 
 /** Save-forever star, refresh and delete — PLAN.md §6 screen 2 and §4. */
@@ -20,7 +22,6 @@ export function RunActions({
   const router = useRouter();
   const [saved, setSaved] = useState(savedForever);
   const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function onStar() {
@@ -31,19 +32,18 @@ export function RunActions({
         await toggleSavedForever(runId, next);
       } catch {
         setSaved(!next);
-        setError("Could not update this run.");
+        toast.error("Could not update this run.");
       }
     });
   }
 
   function onRefresh() {
-    setError(null);
     startTransition(async () => {
       try {
         await startRefresh(runId);
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not start the refresh.");
+        toast.error(err instanceof Error ? err.message : "Could not start the refresh.");
       }
     });
   }
@@ -58,7 +58,7 @@ export function RunActions({
         title={saved ? "Saved forever — exempt from cleanup" : "Save this run forever"}
         className={`${BTN_SECONDARY} ${saved ? "text-heat-amber" : ""}`}
       >
-        <span aria-hidden>{saved ? "★" : "☆"}</span>
+        <Star size={15} fill={saved ? "currentColor" : "none"} aria-hidden />
         {saved ? "Saved" : "Save forever"}
       </button>
 
@@ -73,26 +73,28 @@ export function RunActions({
         }
         className={BTN_SECONDARY}
       >
+        <RefreshCw size={15} aria-hidden />
         Refresh
       </button>
 
       {confirming ? (
-        <span className="inline-flex items-center gap-2">
-          <span className="text-xs text-text-secondary">Delete this run?</span>
+        <span className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-heat-red/30 bg-heat-red-soft py-1 pr-1 pl-3">
+          <span className="text-xs font-medium text-heat-red">Delete this run?</span>
           <button
             type="button"
             disabled={pending}
             onClick={() => startTransition(async () => { await removeRun(runId); })}
-            className={`${BTN_SECONDARY} text-heat-red`}
+            className={`${btn("secondary", "xs")} text-heat-red`}
           >
             Delete
           </button>
-          <button type="button" onClick={() => setConfirming(false)} className={BTN_SECONDARY}>
+          <button type="button" onClick={() => setConfirming(false)} className={btn("secondary", "xs")}>
             Cancel
           </button>
         </span>
       ) : (
         <button type="button" onClick={() => setConfirming(true)} className={BTN_SECONDARY}>
+          <Trash2 size={15} aria-hidden />
           Delete
         </button>
       )}
@@ -100,11 +102,6 @@ export function RunActions({
       {refreshedAt && (
         <span className="text-xs text-text-muted">
           Refreshed {new Date(refreshedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-        </span>
-      )}
-      {error && (
-        <span role="alert" className="text-xs text-heat-red">
-          {error}
         </span>
       )}
     </div>

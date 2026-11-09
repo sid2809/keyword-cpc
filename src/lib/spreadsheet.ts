@@ -48,7 +48,11 @@ function normaliseGrid(grid: unknown[][]): ParsedSheet {
   const rows = grid.map((r) => r.map(cellToString)).filter((r) => r.some((c) => c !== ""));
   if (rows.length === 0) return { columns: [], rows: [], hasHeader: false, totalRows: 0 };
 
-  const width = Math.max(...rows.map((r) => r.length));
+  // A loop, not Math.max(...rows.map(…)): spreading one argument per row
+  // overflows the call stack between 125,000 and 500,000 rows ("Maximum call
+  // stack size exceeded"), and a 500,000-row CSV fits under MAX_UPLOAD_BYTES.
+  let width = 0;
+  for (const r of rows) if (r.length > width) width = r.length;
   const padded = rows.map((r) => (r.length === width ? r : [...r, ...Array(width - r.length).fill("")]));
 
   const hasHeader = looksLikeHeader(padded[0]) && padded.length > 1;

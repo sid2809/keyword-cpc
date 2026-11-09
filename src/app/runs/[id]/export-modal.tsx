@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Download } from "lucide-react";
 import { BTN_PRIMARY, BTN_SECONDARY } from "@/components/ui";
+import { toast } from "@/components/toast";
 import type { DedupMode } from "@/lib/types";
 
 /** Column-selection modal before download — PLAN.md §6. */
@@ -42,7 +44,6 @@ export function ExportModal({
   const [selected, setSelected] = useState<string[]>(DEFAULTS);
   const [format, setFormat] = useState<"csv" | "xlsx">("xlsx");
   const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const selectionCount = selection?.length ?? 0;
 
@@ -68,7 +69,6 @@ export function ExportModal({
    */
   async function downloadSelection() {
     setDownloading(true);
-    setError(null);
     try {
       const res = await fetch(`/api/runs/${runId}/export`, {
         method: "POST",
@@ -91,7 +91,7 @@ export function ExportModal({
       setTimeout(() => URL.revokeObjectURL(url), 0);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export failed.");
+      toast.error(err instanceof Error ? err.message : "Export failed.");
     } finally {
       setDownloading(false);
     }
@@ -110,63 +110,70 @@ export function ExportModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="export-title"
-        className="w-full max-w-md rounded-[var(--radius-card)] border border-border bg-surface p-5"
+        className="w-full max-w-md rounded-[var(--radius-card)] border border-border bg-raised shadow-overlay"
       >
-        <h2 id="export-title" className="text-sm font-semibold text-text">
-          Export
-        </h2>
-        <p className="mt-1 text-xs text-text-muted">
-          {selectionCount > 0
-            ? `${selectionCount.toLocaleString("en-IN")} selected ${selectionCount === 1 ? "row" : "rows"}. `
-            : ""}
-          {mode === "intact"
-            ? "Your original rows and order are preserved."
-            : "One row per keyword after deduplication."}
-          {hasUpload && mode === "intact" && " Your uploaded columns are re-attached."}
-        </p>
-
-        <fieldset className="mt-4">
-          <legend className="text-xs font-medium text-text-secondary">Columns</legend>
-          <div className="mt-2 grid grid-cols-2 gap-1.5">
-            {COLUMNS.filter((c) => c.key !== "url" || hasUrls).map((c) => (
-              <label key={c.key} className="flex items-center gap-2 text-sm text-text">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(c.key)}
-                  onChange={() => toggle(c.key)}
-                  className="accent-[var(--accent)]"
-                />
-                <span className="truncate">{c.label}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <fieldset className="mt-4">
-          <legend className="text-xs font-medium text-text-secondary">Format</legend>
-          <div className="mt-2 flex gap-4">
-            {(["xlsx", "csv"] as const).map((f) => (
-              <label key={f} className="flex items-center gap-2 text-sm text-text">
-                <input
-                  type="radio"
-                  name="format"
-                  checked={format === f}
-                  onChange={() => setFormat(f)}
-                  className="accent-[var(--accent)]"
-                />
-                {f.toUpperCase()}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        {error && (
-          <p role="alert" className="mt-3 text-sm text-heat-red">
-            {error}
+        <div className="border-b border-border p-5">
+          <h2 id="export-title" className="text-base font-semibold text-text">
+            Export
+          </h2>
+          <p className="mt-1 text-sm text-text-secondary">
+            {selectionCount > 0
+              ? `${selectionCount.toLocaleString("en-IN")} selected ${selectionCount === 1 ? "row" : "rows"}. `
+              : ""}
+            {mode === "intact"
+              ? "Your original rows and order are preserved."
+              : "One row per keyword after deduplication."}
+            {hasUpload && mode === "intact" && " Your uploaded columns are re-attached."}
           </p>
-        )}
+        </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="space-y-5 p-5">
+          <fieldset>
+            <legend className="text-xs font-medium text-text-secondary">Columns</legend>
+            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+              {COLUMNS.filter((c) => c.key !== "url" || hasUrls).map((c) => (
+                <label
+                  key={c.key}
+                  className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-control)] px-2 py-1.5 text-sm text-text hover:bg-subtle"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(c.key)}
+                    onChange={() => toggle(c.key)}
+                    className="h-4 w-4 accent-[var(--accent)]"
+                  />
+                  <span className="truncate">{c.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-xs font-medium text-text-secondary">Format</legend>
+            <div className="mt-2 flex gap-2">
+              {(["xlsx", "csv"] as const).map((f) => (
+                <label
+                  key={f}
+                  className={
+                    "flex cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border px-3 py-1.5 text-sm font-medium " +
+                    (format === f ? "border-accent bg-accent-soft text-text" : "border-border-strong text-text-secondary hover:bg-subtle")
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="format"
+                    checked={format === f}
+                    onChange={() => setFormat(f)}
+                    className="h-4 w-4 accent-[var(--accent)]"
+                  />
+                  {f.toUpperCase()}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-border bg-subtle/60 px-5 py-3">
           <button type="button" onClick={onClose} className={BTN_SECONDARY}>
             Cancel
           </button>
@@ -177,6 +184,7 @@ export function ExportModal({
               onClick={downloadSelection}
               className={BTN_PRIMARY}
             >
+              <Download size={15} aria-hidden />
               {downloading ? "Preparing…" : `Download ${selectionCount.toLocaleString("en-IN")}`}
             </button>
           ) : (
@@ -188,6 +196,7 @@ export function ExportModal({
               }}
               className={`${BTN_PRIMARY} ${selected.length === 0 ? "pointer-events-none opacity-50" : ""}`}
             >
+              <Download size={15} aria-hidden />
               Download
             </a>
           )}

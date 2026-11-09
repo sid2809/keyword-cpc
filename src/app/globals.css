@@ -1,17 +1,26 @@
 @import "tailwindcss";
 
-/* Design tokens — PLAN.md §5. Values are locked; change them here only. */
+/*
+ * Design tokens — one set of CSS variables drives light and dark.
+ * Neutral greys + ONE accent (indigo). CPC heat colours keep their original
+ * values so their meaning does not change.
+ *
+ * Every text colour below was measured at >= 4.5:1 (WCAG AA) against
+ * --surface, --bg and --subtle in its theme.
+ */
 
 :root,
 [data-theme="light"] {
-  --bg: #f8fafc;
+  --bg: #fafafa;
   --surface: #ffffff;
   --raised: #ffffff;
-  --border: #e2e8f0;
+  --subtle: #f4f4f5;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
 
-  --text: #0f172a;
-  --text-secondary: #64748b;
-  --text-muted: #94a3b8;
+  --text: #09090b;
+  --text-secondary: #52525b;
+  --text-muted: #6b6b73;
 
   --accent: #4f46e5;
   --accent-hover: #4338ca;
@@ -21,6 +30,26 @@
   --heat-green: #15803d;
   --heat-amber: #b45309;
   --heat-red: #b91c1c;
+  --heat-green-soft: rgb(21 128 61 / 0.1);
+  /* Status-pill text on its green tint: #15803d measured 4.38:1 there,
+     under AA, so pills use a darker green. CPC colours are unchanged. */
+  --status-done: #166534;
+
+  /* Identity: dark sidebar in both themes, tinted header band. Measured:
+     sidebar text 7.66:1, active item 14.91:1; on the band muted text 4.91:1. */
+  --sidebar-bg: #0b0b0f;
+  --sidebar-border: #1f1f25;
+  --sidebar-text: #a1a1aa;
+  --sidebar-text-strong: #fafafa;
+  --sidebar-hover: #1c1c22;
+  --sidebar-active: rgb(129 140 248 / 0.18);
+  --sidebar-accent: #a5b4fc;
+  --band: #f6f6fe;
+  --heat-amber-soft: rgb(180 83 9 / 0.1);
+  --heat-red-soft: rgb(185 28 28 / 0.08);
+
+  --elevation-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --elevation-overlay: 0 8px 24px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04);
 }
 
 /*
@@ -32,52 +61,90 @@
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-  --bg: #0b1220;
-  --surface: #131e30;
-  --raised: #1e293b;
-  --border: #26344a;
+    --bg: #09090b;
+    --surface: #111113;
+    --raised: #18181b;
+    --subtle: #18181b;
+    --border: #27272a;
+    --border-strong: #3f3f46;
 
-  --text: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+    --text: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #8a8a93;
 
-  --accent: #818cf8;
-  --accent-hover: #a5b4fc;
-  --accent-soft: rgb(129 140 248 / 0.12);
-  --on-accent: #0b1220;
+    --accent: #818cf8;
+    --accent-hover: #a5b4fc;
+    --accent-soft: rgb(129 140 248 / 0.12);
+    --on-accent: #09090b;
 
-  --heat-green: #4ade80;
-  --heat-amber: #fbbf24;
-  --heat-red: #f87171;
+    --heat-green: #4ade80;
+    --heat-amber: #fbbf24;
+    --heat-red: #f87171;
+    --heat-green-soft: rgb(74 222 128 / 0.12);
+    --status-done: #4ade80;
+    --heat-amber-soft: rgb(251 191 36 / 0.12);
+    --heat-red-soft: rgb(248 113 113 / 0.12);
+
+    --sidebar-bg: #0b0b0f;
+    --sidebar-border: #1f1f25;
+    --sidebar-text: #a1a1aa;
+    --sidebar-text-strong: #fafafa;
+    --sidebar-hover: #1c1c22;
+    --sidebar-active: rgb(129 140 248 / 0.18);
+    --sidebar-accent: #a5b4fc;
+    --band: #13131e;
+
+    --elevation-card: 0 1px 2px rgb(0 0 0 / 0.3);
+    --elevation-overlay: 0 8px 24px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.3);
   }
 }
 
 /* An explicit choice always beats the OS preference, so this comes last. */
 [data-theme="dark"] {
-  --bg: #0b1220;
-  --surface: #131e30;
-  --raised: #1e293b;
-  --border: #26344a;
+  --bg: #09090b;
+  --surface: #111113;
+  --raised: #18181b;
+  --subtle: #18181b;
+  --border: #27272a;
+  --border-strong: #3f3f46;
 
-  --text: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #8a8a93;
 
   --accent: #818cf8;
   --accent-hover: #a5b4fc;
   --accent-soft: rgb(129 140 248 / 0.12);
-  --on-accent: #0b1220;
+  --on-accent: #09090b;
 
   --heat-green: #4ade80;
   --heat-amber: #fbbf24;
   --heat-red: #f87171;
+  --heat-green-soft: rgb(74 222 128 / 0.12);
+  --status-done: #4ade80;
+  --heat-amber-soft: rgb(251 191 36 / 0.12);
+  --heat-red-soft: rgb(248 113 113 / 0.12);
+
+  --sidebar-bg: #0b0b0f;
+  --sidebar-border: #1f1f25;
+  --sidebar-text: #a1a1aa;
+  --sidebar-text-strong: #fafafa;
+  --sidebar-hover: #1c1c22;
+  --sidebar-active: rgb(129 140 248 / 0.18);
+  --sidebar-accent: #a5b4fc;
+  --band: #13131e;
+
+  --elevation-card: 0 1px 2px rgb(0 0 0 / 0.3);
+  --elevation-overlay: 0 8px 24px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.3);
 }
 
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
+  --color-subtle: var(--subtle);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
 
   --color-text: var(--text);
   --color-text-secondary: var(--text-secondary);
@@ -91,13 +158,29 @@
   --color-heat-green: var(--heat-green);
   --color-heat-amber: var(--heat-amber);
   --color-heat-red: var(--heat-red);
+  --color-heat-green-soft: var(--heat-green-soft);
+  --color-heat-amber-soft: var(--heat-amber-soft);
+  --color-heat-red-soft: var(--heat-red-soft);
+  --color-status-done: var(--status-done);
+  --color-sidebar: var(--sidebar-bg);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-text-strong: var(--sidebar-text-strong);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-band: var(--band);
+
+  --shadow-card: var(--elevation-card);
+  --shadow-overlay: var(--elevation-overlay);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "JetBrains Mono", monospace;
 
-  /* 8px controls, 12px cards */
-  --radius-control: 8px;
-  --radius-card: 12px;
+  /* 6px controls, 8px cards */
+  --radius-control: 6px;
+  --radius-card: 8px;
+
 }
 
 body {
@@ -106,17 +189,19 @@ body {
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* 150ms ease on hover + theme changes (§5 "Feel"). Excluded from the initial
-   paint so the no-flash theme script doesn't animate. */
+/* 150ms ease on hover + theme changes. */
 @media (prefers-reduced-motion: no-preference) {
   body,
   button,
   input,
+  select,
+  textarea,
   a {
     transition:
       background-color 150ms ease,
       border-color 150ms ease,
-      color 150ms ease;
+      color 150ms ease,
+      box-shadow 150ms ease;
   }
 }
 
@@ -125,9 +210,54 @@ body {
   outline-offset: 2px;
 }
 
-/* All numeric columns: monospace, 13px, tabular alignment. */
-.num {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
+/* On the dark sidebar the indigo ring is too faint (~2.4:1); use the light
+   accent there so focus stays visible (>= 3:1). */
+.sidebar-nav :focus-visible {
+  outline-color: var(--sidebar-accent);
+}
+
+/*
+ * All numeric values: tabular figures so columns align. In the components
+ * layer so a utility (e.g. text-2xl on a stat card) can override the size —
+ * unlayered CSS would beat every Tailwind utility.
+ */
+@layer components {
+  .num {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/*
+ * Sidebar width. `data-sidebar` is set on <html> before first paint by the
+ * inline script in layout.tsx (default: collapsed), so the page never jumps.
+ */
+:root {
+  --sidebar-collapsed: 56px;
+  --sidebar-expanded: 224px;
+  --sidebar-width: var(--sidebar-collapsed);
+}
+/* Same specificity as :root, so it must come after it. */
+[data-sidebar="expanded"] {
+  --sidebar-width: var(--sidebar-expanded);
+}
+[data-sidebar="collapsed"] .sidebar-label {
+  display: none;
+}
+
+/* Toast entrance: 150ms slide + fade, skipped under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .toast-in {
+    animation: toast-in 150ms ease-out;
+  }
 }

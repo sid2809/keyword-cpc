@@ -1,3 +1,5 @@
+import type { Bucket, HeatBands } from "./heat";
+
 /**
  * Types shared between server modules and client components.
  *
@@ -99,4 +101,26 @@ export type RunListItem = {
   /** PRIMARY headline metric: volume-weighted HIGH top-of-page bid. */
   weightedAvgHighTopMicros: number | null;
   savedForever: boolean;
+};
+
+/** One page of the results table, as served by /api/runs/:id/results. */
+export type ResultsPage = {
+  rows: ResultRow[];
+  /** Rows matching the filters, across all pages. */
+  total: number;
+  /** The page actually returned — clamped to the last page if past it. */
+  page: number;
+  pageSize: number;
+};
+
+/** Whole-run facts the results page header needs, independent of filters. */
+export type ResultsOverview = {
+  /** Table rows in this mode, unfiltered. */
+  rowCount: number;
+  /** Table rows flagged no-data, unfiltered — drives "Remove n no-data rows". */
+  noDataRows: number;
+  /** Run tertiles of the high top-of-page bid; null when no row has one. */
+  bands: HeatBands | null;
+  /** Equal-width histogram of the high top-of-page bid. */
+  histogram: Bucket[];
 };

@@ -125,18 +125,10 @@ export async function POST(request: Request) {
   );
   const source = body.source === "csv" || body.source === "xlsx" ? body.source : "paste";
 
-  const runId = await createRun({
-    keywords: parsed,
-    settings,
-    name: clamp(body.name, MAX_LABEL_CHARS),
-    tag: clamp(body.tag, MAX_LABEL_CHARS),
-    source,
-  });
-
   /*
-   * Only persist an upload that is actually well formed. A partial one used to
-   * write JSON `null` into a NOT NULL jsonb column and 500 after the run had
-   * already been created, leaving an orphaned run behind.
+   * Only accept an upload that is actually well formed, and check it BEFORE
+   * the run exists. Checking afterwards returned a 400 for a run that had
+   * already been created and was about to execute, leaving it orphaned.
    */
   const upload = body.upload;
   const uploadIsValid =
@@ -153,6 +145,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "The uploaded sheet was malformed." }, { status: 400 });
   }
 
+  // Out-of-range indexes would silently read undefined, so drop them.
+  const urlColumn =
+    upload && uploadIsValid &&
+    Number.isInteger(upload.urlColumn) &&
+    (upload.urlColumn as number) >= 0 &&
+    (upload.urlColumn as number) < upload.columns.length
+      ? (upload.urlColumn as number)
+      : null;
+
+  /*
+   * A keyword's URL is the cell in its own sheet row, trimmed; blank means no
+   * URL. Same rule the results page used to apply at read time (and that
+   * migration 005 backfilled), now applied once, here.
+   */
+  const urlForSourceRow =
+    upload && uploadIsValid && urlColumn !== null
+      ? (sourceRow: number): string | null => {
+          const cell: unknown = upload.rows[sourceRow]?.[urlColumn];
+          if (cell === null || cell === undefined) return null;
+          const value = (typeof cell === "string" ? cell : String(cell)).trim();
+          return value === "" ? null : value;
+        }
+      : undefined;
+
+  const runId = await createRun({
+    keywords: parsed,
+    settings,
+    name: clamp(body.name, MAX_LABEL_CHARS),
+    tag: clamp(body.tag, MAX_LABEL_CHARS),
+    source,
+    urlForSourceRow,
+  });
+
   if (upload && uploadIsValid) {
     await query(
       `insert into run_uploads (run_id, filename, columns, rows, keyword_column, url_column, has_header)
@@ -163,12 +188,7 @@ export async function POST(request: Request) {
         JSON.stringify(upload.columns.map(asString)),
         JSON.stringify(upload.rows),
         upload.keywordColumn,
-        // Out-of-range indexes would silently read undefined, so drop them.
-        Number.isInteger(upload.urlColumn) &&
-        (upload.urlColumn as number) >= 0 &&
-        (upload.urlColumn as number) < upload.columns.length
-          ? upload.urlColumn
-          : null,
+        urlColumn,
         upload.hasHeader === true,
       ],
     );

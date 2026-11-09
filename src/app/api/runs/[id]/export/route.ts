@@ -1,13 +1,14 @@
 import { getSession } from "@/lib/session";
 import { getRun } from "@/lib/runner";
+import { withDefaults } from "@/lib/run-settings";
 import {
   buildExportGrid,
   exportFilename,
-  gridToCsv,
+  gridToCsvStream,
   gridToXlsx,
   type ExportColumnKey,
 } from "@/lib/export";
-import type { DedupMode } from "@/lib/types";
+import type { DedupMode, RunSettings } from "@/lib/types";
 
 type ExportOptions = {
   format: "csv" | "xlsx";
@@ -16,8 +17,15 @@ type ExportOptions = {
   selection?: string[];
 };
 
-async function respond(runId: string, opts: ExportOptions, runName: string | null) {
-  const grid = await buildExportGrid(runId, opts.columns, opts.mode, opts.selection);
+async function respond(
+  runId: string,
+  opts: ExportOptions,
+  run: { name: string | null; settings: RunSettings },
+) {
+  // No mode given means the run's own setting, as it always did.
+  const mode = opts.mode ?? withDefaults(run.settings).dedupMode;
+  const runName = run.name;
+  const grid = await buildExportGrid(runId, opts.columns, mode, opts.selection);
   const filename = exportFilename(runName, runId, opts.format);
 
   if (opts.format === "xlsx") {
@@ -30,7 +38,9 @@ async function respond(runId: string, opts: ExportOptions, runName: string | nul
     });
   }
 
-  return new Response(gridToCsv(grid), {
+  // Streamed batch by batch: a large run starts downloading at once instead of
+  // being assembled in memory first.
+  return new Response(gridToCsvStream(grid), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="${filename}"`,
@@ -81,7 +91,7 @@ export async function POST(request: Request, { params }: RouteContext<"/api/runs
       columns: (body.columns ?? []) as ExportColumnKey[],
       selection: Array.isArray(body.selection) ? body.selection.map(String) : undefined,
     },
-    run.name,
+    run,
   );
 }
 
@@ -102,5 +112,5 @@ export async function GET(request: Request, { params }: RouteContext<"/api/runs/
     .map((c) => c.trim())
     .filter(Boolean) as ExportColumnKey[];
 
-  return respond(id, { format, mode, columns }, run.name);
+  return respond(id, { format, mode, columns }, run);
 }

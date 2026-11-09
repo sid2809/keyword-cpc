@@ -1,13 +1,15 @@
 "use client";
 
-import { BTN_PRIMARY, CONTROL, Field, SegmentedControl } from "@/components/ui";
+import type { ReactNode } from "react";
+import { Clock, Play } from "lucide-react";
+import { BTN_PRIMARY, CARD, CONTROL, Field, SegmentedControl } from "@/components/ui";
 import { estimateSeconds, formatDuration, formatInt } from "@/lib/format";
 import type { RunSettings } from "@/lib/types";
 
 /**
- * Right panel of the workbench (PLAN.md §6): every setting visible at once,
- * sensible defaults pre-filled so it can be ignored entirely, and the primary
- * action pinned to the bottom of the card.
+ * Settings for a new search, laid out as a compact grid under the keyword
+ * input. The fields, options and hints are the same as before; only the
+ * layout changed. The count and Run button live in <RunBar> below.
  */
 
 const GEO_OPTIONS = [
@@ -34,13 +36,6 @@ export function SettingsPanel({
   onNameChange,
   tag,
   onTagChange,
-  keywordCount,
-  uniqueCount,
-  chunkSize,
-  threshold,
-  submitting,
-  onSubmit,
-  disabled,
 }: {
   settings: RunSettings;
   onChange: (next: RunSettings) => void;
@@ -48,27 +43,17 @@ export function SettingsPanel({
   onNameChange: (v: string) => void;
   tag: string;
   onTagChange: (v: string) => void;
-  keywordCount: number;
-  uniqueCount: number;
-  chunkSize: number;
-  threshold: number;
-  submitting: boolean;
-  onSubmit: () => void;
-  disabled: boolean;
 }) {
-  const eta = formatDuration(estimateSeconds(uniqueCount, chunkSize));
-  const background = uniqueCount > threshold;
-
   return (
-    <div className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-surface">
-      <div className="flex-1 space-y-5 overflow-y-auto p-5">
-        <div>
-          <h2 className="text-sm font-semibold text-text">Settings</h2>
-          <p className="mt-0.5 text-xs text-text-muted">
-            Defaults are set for US / English search. Ignore this panel if that suits.
-          </p>
-        </div>
+    <div className={`${CARD} p-5`}>
+      <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-4">
+        <h2 className="text-sm font-semibold text-text">Settings</h2>
+        <p className="text-xs text-text-muted">
+          Defaults are set for US / English search. Ignore this panel if that suits.
+        </p>
+      </div>
 
+      <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Location" htmlFor="geo">
           <select
             id="geo"
@@ -127,24 +112,26 @@ export function SettingsPanel({
           />
         </Field>
 
-        <Field
-          label="Duplicates"
-          hint={
-            settings.dedupMode === "intact"
-              ? "Every row you submitted comes back, in order, with metrics merged in."
-              : "One row per keyword after Google collapses near-duplicates."
-          }
-        >
-          <SegmentedControl
-            name="Duplicates"
-            value={settings.dedupMode}
-            onChange={(v) => onChange({ ...settings, dedupMode: v as RunSettings["dedupMode"] })}
-            options={[
-              { value: "intact", label: "Keep my list intact" },
-              { value: "deduped", label: "Deduped only" },
-            ]}
-          />
-        </Field>
+        <div className="sm:col-span-2">
+          <Field
+            label="Duplicates"
+            hint={
+              settings.dedupMode === "intact"
+                ? "Every row you submitted comes back, in order, with metrics merged in."
+                : "One row per keyword after Google collapses near-duplicates."
+            }
+          >
+            <SegmentedControl
+              name="Duplicates"
+              value={settings.dedupMode}
+              onChange={(v) => onChange({ ...settings, dedupMode: v as RunSettings["dedupMode"] })}
+              options={[
+                { value: "intact", label: "Keep my list intact" },
+                { value: "deduped", label: "Deduped only" },
+              ]}
+            />
+          </Field>
+        </div>
 
         <Field label="Run name" htmlFor="run-name">
           <input
@@ -166,29 +153,72 @@ export function SettingsPanel({
           />
         </Field>
       </div>
+    </div>
+  );
+}
 
-      <div className="border-t border-border p-5">
-        <div className="mb-3 flex items-baseline justify-between text-xs">
-          <span className="text-text-secondary">
-            {formatInt(uniqueCount)} unique
+/**
+ * The run bar: keyword count, time estimate and the Run button. It sticks to
+ * the bottom of the screen while the form is on screen, so the primary action
+ * is always in reach. `children` slots in the submit error (with Retry).
+ */
+export function RunBar({
+  keywordCount,
+  uniqueCount,
+  chunkSize,
+  threshold,
+  submitting,
+  onSubmit,
+  disabled,
+  children,
+}: {
+  keywordCount: number;
+  uniqueCount: number;
+  chunkSize: number;
+  threshold: number;
+  submitting: boolean;
+  onSubmit: () => void;
+  disabled: boolean;
+  children?: ReactNode;
+}) {
+  const eta = formatDuration(estimateSeconds(uniqueCount, chunkSize));
+  const background = uniqueCount > threshold;
+
+  return (
+    <div className="sticky bottom-0 z-20 -mx-2 px-2 pt-2 pb-4">
+      {children}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-card)] border border-border-strong bg-raised px-5 py-3 shadow-overlay">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <span className="num text-sm text-text">
+            <span className="text-base font-semibold">{formatInt(uniqueCount)}</span>{" "}
+            <span className="text-text-secondary">unique</span>
             {keywordCount !== uniqueCount && (
               <span className="text-text-muted"> of {formatInt(keywordCount)}</span>
             )}
           </span>
-          {uniqueCount > 0 && <span className="num text-text-muted">~{eta}</span>}
+          {uniqueCount > 0 && (
+            <span className="num inline-flex items-center gap-1 text-xs text-text-muted">
+              <Clock size={12} aria-hidden />~{eta}
+            </span>
+          )}
+          {uniqueCount > 0 && (
+            <span className="text-xs text-text-muted">
+              {background
+                ? `Over ${formatInt(threshold)} keywords — this runs in the background.`
+                : "Runs here on the page."}
+            </span>
+          )}
         </div>
 
-        <button type="button" onClick={onSubmit} disabled={disabled || submitting} className={`${BTN_PRIMARY} w-full`}>
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={disabled || submitting}
+          className={`${BTN_PRIMARY} min-w-[180px]`}
+        >
+          <Play size={14} fill="currentColor" aria-hidden />
           {submitting ? "Starting…" : background ? "Run in background" : "Run search"}
         </button>
-
-        {uniqueCount > 0 && (
-          <p className="mt-2 text-center text-xs text-text-muted">
-            {background
-              ? `Over ${formatInt(threshold)} keywords — this runs in the background.`
-              : "Runs here on the page."}
-          </p>
-        )}
       </div>
     </div>
   );

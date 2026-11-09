@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SettingsPanel } from "./settings-panel";
+import { RunBar, SettingsPanel } from "./settings-panel";
 import { UploadPanel, type UploadedSheet } from "./upload-panel";
 import { RunProgress } from "./run-progress";
+import { CircleAlert, ClipboardList, Upload } from "lucide-react";
 import { formatInt } from "@/lib/format";
+import { btn } from "@/components/ui";
 import type { RunSettings } from "@/lib/types";
 
 /**
@@ -116,24 +118,34 @@ export function Workbench({
   }
 
   return (
-    <div className="flex flex-col gap-4 min-[900px]:flex-row">
-      {/* LEFT ~60% */}
-      <section className="flex min-h-[420px] flex-col min-[900px]:w-[60%]">
-        <div className="mb-3 flex gap-1" role="tablist" aria-label="Keyword source">
-          {(["paste", "upload"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              role="tab"
-              aria-selected={tab === t}
-              onClick={() => setTab(t)}
-              className={
-                "rounded-[var(--radius-control)] px-3 py-1.5 text-sm font-medium capitalize " +
-                (tab === t ? "bg-accent-soft text-accent" : "text-text-secondary hover:text-accent")
-              }
-            >
-              {t}
-            </button>
-          ))}
+    <div className="flex flex-col gap-4">
+      {/* Keywords — full width */}
+      <section className="flex flex-col">
+        <div
+          className="mb-3 inline-flex self-start rounded-[var(--radius-control)] border border-border bg-subtle p-0.5"
+          role="tablist"
+          aria-label="Keyword source"
+        >
+          {(["paste", "upload"] as Tab[]).map((t) => {
+            const Icon = t === "paste" ? ClipboardList : Upload;
+            return (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={tab === t}
+                onClick={() => setTab(t)}
+                className={
+                  "inline-flex items-center gap-2 rounded-[4px] px-3 py-1.5 text-sm font-medium capitalize " +
+                  (tab === t
+                    ? "bg-surface text-text shadow-card ring-1 ring-border"
+                    : "text-text-secondary hover:text-text")
+                }
+              >
+                <Icon size={15} className={tab === t ? "text-accent" : ""} aria-hidden />
+                {t}
+              </button>
+            );
+          })}
         </div>
 
         {tab === "paste" ? (
@@ -144,7 +156,7 @@ export function Workbench({
               spellCheck={false}
               placeholder={"gardening tools\nraised garden bed\nlawn mower"}
               aria-label="Keywords"
-              className="min-h-[320px] flex-1 resize-y rounded-[var(--radius-card)] border border-border bg-surface p-4 font-mono text-[13px] leading-6 text-text placeholder:text-text-muted"
+              className="min-h-[240px] flex-1 resize-y rounded-[var(--radius-card)] border border-border-strong bg-surface p-4 font-mono text-[13px] leading-6 text-text shadow-card placeholder:text-text-muted hover:border-text-muted/50"
             />
             <p className="mt-2 text-xs text-text-muted">
               One keyword per line, or comma separated. Up to {formatInt(threshold)} runs instantly;
@@ -165,35 +177,41 @@ export function Workbench({
         )}
       </section>
 
-      {/* RIGHT ~40% */}
-      <aside className="min-[900px]:w-[40%]">
-        <SettingsPanel
-          settings={settings}
-          onChange={setSettings}
-          name={name}
-          onNameChange={setName}
-          tag={tag}
-          onTagChange={setTag}
-          keywordCount={keywords.length}
-          uniqueCount={uniqueCount}
-          chunkSize={chunkSize}
-          threshold={threshold}
-          submitting={submitting}
-          onSubmit={submit}
-          disabled={uniqueCount === 0}
-        />
+      {/* Settings — compact grid */}
+      <SettingsPanel
+        settings={settings}
+        onChange={setSettings}
+        name={name}
+        onNameChange={setName}
+        tag={tag}
+        onTagChange={setTag}
+      />
+
+      {/* Count + Run — sticky at the bottom while the form is on screen */}
+      <RunBar
+        keywordCount={keywords.length}
+        uniqueCount={uniqueCount}
+        chunkSize={chunkSize}
+        threshold={threshold}
+        submitting={submitting}
+        onSubmit={submit}
+        disabled={uniqueCount === 0}
+      >
         {error && (
           <div
             role="alert"
-            className="mt-3 flex items-center justify-between gap-3 rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2"
+            className="mb-2 flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-heat-red/30 bg-heat-red-soft px-3 py-2"
           >
-            <span className="text-sm text-heat-red">{error}</span>
-            <button type="button" onClick={submit} className="text-sm font-medium text-accent hover:underline">
+            <span className="flex items-center gap-2 text-sm text-heat-red">
+              <CircleAlert size={15} className="shrink-0" aria-hidden />
+              {error}
+            </span>
+            <button type="button" onClick={submit} className={btn("secondary", "xs")}>
               Retry
             </button>
           </div>
         )}
-      </aside>
+      </RunBar>
     </div>
   );
 }

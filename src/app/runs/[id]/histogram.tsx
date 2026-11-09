@@ -1,6 +1,6 @@
 "use client";
 
-import { bandColorVar, bandFor, histogram, type HeatBands } from "@/lib/heat";
+import { bandColorVar, bandFor, type Bucket, type HeatBands } from "@/lib/heat";
 import { formatMicros } from "@/lib/format";
 
 /**
@@ -9,21 +9,23 @@ import { formatMicros } from "@/lib/format";
  * bands as the primary column, so the chart and the table agree.
  */
 export function Histogram({
-  values,
+  buckets,
   bands,
   selected,
   onSelect,
 }: {
-  /** The primary metric's values, in micros — currently high top-of-page bid. */
-  values: (number | null)[];
+  /**
+   * Buckets of the primary metric (high top-of-page bid), counted over the
+   * whole run by the server — see getResultsOverview().
+   */
+  buckets: Bucket[];
   bands: HeatBands | null;
   selected: { from: number; to: number } | null;
   onSelect: (range: { from: number; to: number } | null) => void;
 }) {
-  const buckets = histogram(values);
   if (buckets.length === 0) return null;
 
-  const max = Math.max(...buckets.map((b) => b.count));
+  const max = buckets.reduce((m, b) => (b.count > m ? b.count : m), 0);
 
   return (
     <div>

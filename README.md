@@ -196,9 +196,19 @@ product decision rather than a workaround.
   run's default. No-data rows sink to the bottom of a numeric sort whichever way
   it points; an absent bid is not "cheap". The keyword/position sort is exempt so
   that "keep my list intact" mode can still reproduce your original row order.
-- **Select rows** with the checkbox column. The header checkbox selects the
-  **current filtered view**, not the whole run, and shift-click selects a range,
-  taking the state of the row you anchored on. Selections deliberately **survive
+- **Large runs are paged.** The table shows one page at a time (50, 100, 250
+  or 500 rows); filtering, sorting and paging run in Postgres, not the browser.
+  The summary, histogram and heat bands still describe the whole run. Before
+  this, a 125,000-keyword run sent the browser a 308 MB page (25 s on the
+  server) and asked it to draw 125,000 rows, which froze the tab; it is now a
+  ~280 KB page and each page of rows is a 30–200 ms request. The full design
+  and how it was verified are in `src/lib/results-table.ts`.
+- **Typing in a filter** waits 300 ms before querying. A number box holding
+  something that is not a number turns red and is left out of the query.
+- **Select rows** with the checkbox column. The header checkbox selects **every
+  row matching the filters, on every page**, not the whole run, and shift-click
+  selects a range — across pages too — taking the state of the row you anchored
+  on. Selections deliberately **survive
   filter changes** — narrow, pick, re-narrow, pick again, then export the union.
   Anything selected but hidden is reported next to the count.
 - **Export** offers column selection and CSV/XLSX. In intact mode it preserves
@@ -260,6 +270,14 @@ matched on **Google's canonical form**, so a run containing "cars" lines up with
 one containing "car"; matching submitted text would miss that. Keywords present
 in only one run are listed at the bottom rather than dropped, so a shrinking
 list is visible rather than silent.
+
+The comparison is **paged, 100 rows a page** (`?page=N` in the URL), with the
+join and ordering done in Postgres. It used to load and render every keyword of
+both runs: comparing two 125,000-keyword runs took the server to 5.6 GB until
+the operating system killed it. A page now renders in about a second at that
+size, and the rows and their order are unchanged — biggest change first, then
+keywords only in the first run, then only in the second, with ties now broken
+alphabetically so paging is stable.
 
 Comparison is useful across geos (run the same list for US and India), across
 time (compare a saved run with a fresh one), or across settings.
@@ -423,6 +441,19 @@ pick up at the right chunk without a second table.
 
 Migrations are forward-only and tracked in `schema_migrations`. Add a new
 numbered file rather than editing an applied one.
+
+**Postgres must be built with ICU** (the official images and Railway's are).
+Migration 005 creates the `keyword_order` ICU collation so alphabetical order
+and case-insensitive search in SQL match what the browser did; without ICU that
+migration stops with an error instead of sorting differently. It also builds
+covering indexes and backfills `run_keywords.url` — about 2.5 s for a 125,000-row
+sheet. Index builds block writes to those tables while they run, so apply it
+when no run is in progress.
+
+After every run the runner runs `ANALYZE` on `run_keywords` and
+`keyword_metrics` (~0.5 s) before marking the run done. Without fresh
+statistics Postgres can plan a just-finished run as if it had one row; a
+125,000-row results query then ran for over five minutes.
 
 ## Deploying to Railway
 
