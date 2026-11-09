@@ -28,7 +28,7 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
   return (
     <>
       {selected.length > 0 && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-border bg-accent-soft px-4 py-2.5">
+        <div className="fade-in mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-border bg-accent-soft px-4 py-2.5">
           <span className="text-sm text-text">
             {selected.length === 1
               ? "Pick one more run to compare."
@@ -50,7 +50,7 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface">
+      <div className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-card">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-border">
@@ -69,7 +69,10 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
             {runs.map((run) => {
               const selectable = run.status === "done";
               return (
-                <tr key={run.id} className="border-b border-border last:border-0 hover:bg-accent-soft/40">
+                <tr
+                  key={run.id}
+                  className="border-b border-border transition-colors duration-[var(--dur-fast)] last:border-0 hover:bg-accent-soft/40"
+                >
                   <td className="px-4 py-2">
                     <input
                       type="checkbox"

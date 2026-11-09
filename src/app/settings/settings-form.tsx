@@ -89,7 +89,7 @@ export function SettingsForm({
           {state.message && (
             <span
               role="status"
-              className={`text-sm ${state.ok ? "text-heat-green" : "text-heat-red"}`}
+              className={`fade-in text-sm ${state.ok ? "text-heat-green" : "text-heat-red"}`}
             >
               {state.message}
             </span>
@@ -132,7 +132,7 @@ export function ConnectionTest() {
       {result && (
         <p
           role="status"
-          className={`mt-3 rounded-[var(--radius-control)] border border-border p-3 text-sm ${
+          className={`fade-in mt-3 rounded-[var(--radius-control)] border border-border p-3 text-sm ${
             result.ok ? "text-heat-green" : "text-heat-red"
           }`}
         >

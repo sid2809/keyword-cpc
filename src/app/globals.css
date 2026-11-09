@@ -389,7 +389,9 @@ body {
 /*
  * Step 2 motion: data and feedback. Every animation sits behind
  * prefers-reduced-motion: no-preference, so with "reduce motion" on, things
- * simply appear in their final state.
+ * simply appear in their final state. Entrance animations use fill-mode
+ * `backwards`: they end on the element's normal style, so once finished they
+ * are released instead of staying attached (hundreds of table rows).
  */
 @media (prefers-reduced-motion: no-preference) {
   /* Histogram bars grow up from the baseline, left to right (--i = index). */
@@ -400,7 +402,7 @@ body {
   }
   .bar-grow {
     transform-origin: bottom;
-    animation: bar-grow var(--dur-slow) var(--ease-out-soft) both;
+    animation: bar-grow var(--dur-slow) var(--ease-out-soft) backwards;
     animation-delay: calc(var(--i, 0) * 28ms + 80ms);
   }
 
@@ -412,7 +414,7 @@ body {
     }
   }
   .row-in {
-    animation: row-in var(--dur-base) var(--ease-out-soft) both;
+    animation: row-in var(--dur-base) var(--ease-out-soft) backwards;
     animation-delay: calc(min(var(--i, 0), 12) * 14ms);
   }
 
@@ -424,7 +426,7 @@ body {
     }
   }
   .chip-in {
-    animation: chip-in var(--dur-base) var(--ease-out-soft) both;
+    animation: chip-in var(--dur-base) var(--ease-out-soft) backwards;
   }
 
   /* Dialogs: backdrop fades, panel scales up from 96%. */
@@ -441,10 +443,10 @@ body {
     }
   }
   .backdrop-in {
-    animation: backdrop-in var(--dur-base) ease-out both;
+    animation: backdrop-in var(--dur-base) ease-out backwards;
   }
   .dialog-in {
-    animation: dialog-in var(--dur-slow) var(--ease-out-soft) both;
+    animation: dialog-in var(--dur-slow) var(--ease-out-soft) backwards;
   }
 
   /* Toasts slide out when dismissed (enter is .toast-in above). */
@@ -499,7 +501,8 @@ body {
  * buttons sit above the pill so their labels stay visible. Unlayered on
  * purpose, so it overrides the buttons' utility classes.
  */
-[data-pill-ready] > button {
+[data-pill-ready] > button,
+[data-pill-ready] > a {
   position: relative;
 }
 [data-pill-ready] > [data-active="true"] {
@@ -516,6 +519,6 @@ body {
     }
   }
   .fade-in {
-    animation: fade-in var(--dur-base) var(--ease-out-soft) both;
+    animation: fade-in var(--dur-base) var(--ease-out-soft) backwards;
   }
 }

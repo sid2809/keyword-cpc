@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { login, type LoginState } from "./actions";
+import { CONTROL_BASE, PRESS } from "@/components/ui";
 
 const INITIAL: LoginState = { error: null };
 
@@ -24,13 +25,13 @@ export function LoginForm({ next }: { next: string }) {
           autoFocus
           required
           aria-describedby={state.error ? "login-error" : undefined}
-          className="h-10 rounded-[var(--radius-control)] border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted"
+          className={`${CONTROL_BASE} h-10 border-border-strong px-3 focus:border-accent/60 focus:shadow-raised`}
           placeholder="Enter password"
         />
       </div>
 
       {state.error && (
-        <p id="login-error" role="alert" className="text-sm text-heat-red">
+        <p id="login-error" role="alert" className="fade-in text-sm text-heat-red">
           {state.error}
         </p>
       )}
@@ -38,7 +39,7 @@ export function LoginForm({ next }: { next: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="h-10 rounded-[var(--radius-control)] bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover disabled:opacity-60"
+        className={`h-10 rounded-[var(--radius-control)] bg-accent px-4 text-sm font-medium text-on-accent shadow-card hover:bg-accent-hover hover:shadow-raised disabled:opacity-60 ${PRESS}`}
       >
         {pending ? "Signing in…" : "Sign in"}
       </button>

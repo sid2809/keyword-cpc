@@ -5,6 +5,7 @@ import { BTN_PRIMARY, Card, EmptyState, PageHeader } from "@/components/ui";
 import { getSession } from "@/lib/session";
 import { listRuns } from "@/lib/run-queries";
 import { RunsTable } from "./runs-table";
+import { PillTrack } from "@/components/pill-track";
 
 /** Runs / history — PLAN.md §6 screen 3. */
 export default async function RunsPage({ searchParams }: PageProps<"/runs">) {
@@ -20,13 +21,15 @@ export default async function RunsPage({ searchParams }: PageProps<"/runs">) {
         title="Runs"
         description="Every search you have run. Tick two finished runs to compare them."
         actions={
-          <nav
-            aria-label="Filter runs"
-            className="inline-flex rounded-[var(--radius-control)] border border-border bg-subtle p-0.5"
-          >
+          <nav aria-label="Filter runs">
+            <PillTrack
+              className="inline-flex rounded-[var(--radius-control)] border border-border bg-subtle p-0.5"
+              pillClassName="rounded-[4px]"
+            >
             <Link
               href="/runs"
               aria-current={savedOnly ? undefined : "page"}
+              data-active={!savedOnly}
               className={
                 "rounded-[4px] px-3 py-1 text-xs font-medium " +
                 (savedOnly
@@ -39,6 +42,7 @@ export default async function RunsPage({ searchParams }: PageProps<"/runs">) {
             <Link
               href="/runs?saved=1"
               aria-current={savedOnly ? "page" : undefined}
+              data-active={savedOnly}
               className={
                 "rounded-[4px] px-3 py-1 text-xs font-medium " +
                 (savedOnly
@@ -48,6 +52,7 @@ export default async function RunsPage({ searchParams }: PageProps<"/runs">) {
             >
               ★ Saved
             </Link>
+            </PillTrack>
           </nav>
         }
       />

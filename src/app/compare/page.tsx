@@ -114,11 +114,12 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {rows.map((r, i) => (
                   <tr
                     key={r.keyword}
+                    style={{ "--i": i } as React.CSSProperties}
                     className={
-                      "border-b border-border last:border-0 hover:bg-accent-soft/40 " +
+                      "row-in border-b border-border transition-colors duration-[var(--dur-fast)] last:border-0 hover:bg-accent-soft/40 " +
                       (r.presence !== "both" ? "opacity-60" : "")
                     }
                   >
