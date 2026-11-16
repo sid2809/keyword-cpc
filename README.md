@@ -97,6 +97,17 @@ zipped CSV" from https://developers.google.com/google-ads/api/data/geotargets,
 unzip it, and run `npm run build:countries -- path/to/geotargets-YYYY-MM-DD.csv`.
 The script keeps only Active countries and refuses a file in the wrong format.
 
+### Country breakdown (click a keyword)
+
+Google's API has no per-country breakdown, so the app asks once per country
+(`src/lib/geo-breakdown.ts`). Clicking a keyword on the Results page opens a
+side panel that scans a 30-country shortlist (`src/lib/geo-shortlist.ts`,
+about 30 seconds) and offers "Scan all countries" for the other 189. Requests
+use Any language and the run's network, share the 1 request/second limit with
+runs, and are stored per (keyword, network, country) in `keyword_geo_metrics`
+for the calendar month, so reopening is free. Jobs live in `geo_jobs` and
+resume after a restart (migration 006).
+
 A pre-deploy audit of the whole application is recorded in
 [AUDIT.md](./AUDIT.md) — what was tested, the seven defects found and fixed, and
 the gaps that remain untestable locally. Read its closing section before

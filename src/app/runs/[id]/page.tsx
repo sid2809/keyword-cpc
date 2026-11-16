@@ -94,6 +94,7 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
             overview={overview}
             summary={summary}
             mode={settings.dedupMode}
+            network={settings.network}
             hasUpload={Number(uploadRows[0]?.n ?? 0) > 0}
             hasDeltas={run.refresh_count > 0}
             hasUrls={uploadRows[0]?.has_urls ?? false}

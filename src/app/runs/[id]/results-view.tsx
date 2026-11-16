@@ -30,9 +30,10 @@ import {
   btn,
 } from "@/components/ui";
 import { CountUp } from "@/components/count-up";
+import { GeoPanel } from "./geo-panel";
 import { formatCompact, formatInt, formatMicros } from "@/lib/format";
 import { bandColorVar, bandFor, type HeatBands } from "@/lib/heat";
-import type { DedupMode, ResultsOverview, ResultsPage, RunSummary } from "@/lib/types";
+import type { DedupMode, ResultsOverview, ResultsPage, RunSettings, RunSummary } from "@/lib/types";
 import {
   DEFAULT_PAGE_SIZE,
   EMPTY_FILTERS,
@@ -114,11 +115,14 @@ export function ResultsView({
   overview,
   summary,
   mode,
+  network,
   hasUpload,
   hasDeltas,
   hasUrls,
 }: {
   runId: string;
+  /** The run's network; country breakdowns ask Google with the same one. */
+  network: RunSettings["network"];
   /** Page 1 in the run's default order, rendered by the server. */
   initialPage: ResultsPage;
   overview: ResultsOverview;
@@ -139,6 +143,8 @@ export function ResultsView({
   const [maxCpc, setMaxCpc] = useState("");
   const [minVolume, setMinVolume] = useState("");
   const [competition, setCompetition] = useState<Competition | null>(null);
+  /** Keyword whose country breakdown panel is open, or null. */
+  const [geoKeyword, setGeoKeyword] = useState<string | null>(null);
   const [hideNoData, setHideNoData] = useState(false);
   const [bucket, setBucket] = useState<{ from: number; to: number } | null>(null);
   const [storedColumns, storeColumns] = useStoredColumns();
@@ -877,14 +883,17 @@ export function ResultsView({
                             />
                           </td>
                           <td className="px-4 py-2.5 text-sm">
-                            <span
+                            <button
+                              type="button"
+                              onClick={() => setGeoKeyword(r.submitted.trim().toLowerCase())}
                               className={
-                                "block max-w-[320px] truncate " + (r.noData ? "text-text-muted" : "text-text")
+                                "block max-w-[320px] truncate rounded-[3px] text-left underline-offset-2 hover:text-accent hover:underline " +
+                                (r.noData ? "text-text-muted" : "text-text")
                               }
-                              title={r.submitted}
+                              title={`${r.submitted} — show country breakdown`}
                             >
                               {r.submitted}
-                            </span>
+                            </button>
                             {r.canonical && r.canonical.toLowerCase() !== r.submitted.toLowerCase() && (
                               <span className="block max-w-[320px] truncate text-xs text-text-muted" title={r.canonical}>
                                 → {r.canonical}
@@ -1019,6 +1028,10 @@ export function ResultsView({
           </nav>
         )}
       </Card>
+
+      {geoKeyword !== null && (
+        <GeoPanel key={geoKeyword} keyword={geoKeyword} network={network} onClose={() => setGeoKeyword(null)} />
+      )}
 
       {exporting && (
         <ExportModal

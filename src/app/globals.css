@@ -532,3 +532,16 @@ body {
     animation: fade-in var(--dur-base) var(--ease-out-soft) backwards;
   }
 }
+
+/* Country breakdown panel slides in from the right. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes panel-in {
+    from {
+      opacity: 0;
+      translate: 24px 0;
+    }
+  }
+  .geo-panel {
+    animation: panel-in var(--dur-slow) var(--ease-out-soft) backwards;
+  }
+}

@@ -28,4 +28,14 @@ export async function register() {
     .catch((err) => {
       console.error("[runner] boot resume failed:", err instanceof Error ? err.message : err);
     });
+
+  // Country-breakdown jobs resume the same way (geo-breakdown.ts).
+  const { resumeInterruptedGeoJobs } = await import("./lib/geo-breakdown");
+  void resumeInterruptedGeoJobs()
+    .then((n) => {
+      if (n > 0) console.log(`[geo] resumed ${n} interrupted breakdown job(s) at boot`);
+    })
+    .catch((err) => {
+      console.error("[geo] boot resume failed:", err instanceof Error ? err.message : err);
+    });
 }
