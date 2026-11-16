@@ -302,3 +302,58 @@ export async function getGeoBreakdown(keyword: string, network: GeoNetwork): Pro
       : null,
   };
 }
+
+// --- bulk -------------------------------------------------------------------
+
+export type GeoJobSummary = {
+  id: string;
+  status: GeoJobRow["status"];
+  scope: GeoScope;
+  keywords: number;
+  done: number;
+  total: number;
+  error: string | null;
+};
+
+/** Jobs still working, plus ones that failed in the last 10 minutes. */
+export async function listGeoJobs(): Promise<GeoJobSummary[]> {
+  const rows = await query<{
+    id: string;
+    status: GeoJobRow["status"];
+    scope: GeoScope;
+    n: number;
+    cursor: number;
+    total: number;
+    error: string | null;
+  }>(
+    `select id, status, scope, cardinality(keywords) as n, cursor, cardinality(countries) as total, error
+       from geo_jobs
+      where status in ('queued', 'running') or (status = 'failed' and updated_at > now() - interval '10 minutes')
+      order by created_at asc`,
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    status: r.status,
+    scope: r.scope,
+    keywords: r.n,
+    done: r.cursor,
+    total: r.total,
+    error: r.error,
+  }));
+}
+
+/**
+ * How many countries each keyword has a fresh answer for (this month).
+ * Keywords with none are absent from the result.
+ */
+export async function geoCoverage(keywords: string[], network: GeoNetwork): Promise<Record<string, number>> {
+  if (keywords.length === 0) return {};
+  const rows = await query<{ keyword: string; n: number }>(
+    `select keyword, count(*)::int as n
+       from keyword_geo_metrics
+      where network = $1 and keyword = any($2::text[]) and ${FRESH}
+      group by keyword`,
+    [network, keywords],
+  );
+  return Object.fromEntries(rows.map((r) => [r.keyword, r.n]));
+}

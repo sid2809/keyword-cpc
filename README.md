@@ -108,6 +108,11 @@ runs, and are stored per (keyword, network, country) in `keyword_geo_metrics`
 for the calendar month, so reopening is free. Jobs live in `geo_jobs` and
 resume after a restart (migration 006).
 
+Selecting rows shows "Get geographical breakdown": one job for all selected
+keywords (up to 50,000), costing one request per country per 5,000 keywords.
+The dialog shows the request count first; a strip above the table shows
+progress, and rows with a stored breakdown carry a "n countries" marker.
+
 A pre-deploy audit of the whole application is recorded in
 [AUDIT.md](./AUDIT.md) — what was tested, the seven defects found and fixed, and
 the gaps that remain untestable locally. Read its closing section before

@@ -12,6 +12,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  Globe,
   Search,
   SearchX,
   X,
@@ -30,7 +31,9 @@ import {
   btn,
 } from "@/components/ui";
 import { CountUp } from "@/components/count-up";
+import { toast } from "@/components/toast";
 import { GeoPanel } from "./geo-panel";
+import { GeoBulkDialog, GeoJobsStrip, useGeoCoverage, useGeoJobs } from "./geo-bulk";
 import { formatCompact, formatInt, formatMicros } from "@/lib/format";
 import { bandColorVar, bandFor, type HeatBands } from "@/lib/heat";
 import type { DedupMode, ResultsOverview, ResultsPage, RunSettings, RunSummary } from "@/lib/types";
@@ -145,6 +148,9 @@ export function ResultsView({
   const [competition, setCompetition] = useState<Competition | null>(null);
   /** Keyword whose country breakdown panel is open, or null. */
   const [geoKeyword, setGeoKeyword] = useState<string | null>(null);
+  const [geoBulkOpen, setGeoBulkOpen] = useState(false);
+  const [geoNonce, setGeoNonce] = useState(0);
+  const geoJobs = useGeoJobs(geoNonce);
   const [hideNoData, setHideNoData] = useState(false);
   const [bucket, setBucket] = useState<{ from: number; to: number } | null>(null);
   const [storedColumns, storeColumns] = useStoredColumns();
@@ -243,6 +249,12 @@ export function ResultsView({
   const loading = data.key !== queryKey && fetchError?.key !== queryKey;
   const errorMessage = fetchError?.key === queryKey ? fetchError.message : null;
   const { rows, total } = data.page;
+
+  // Which rows on this page already have a country breakdown. Re-checked as
+  // jobs progress (their summed progress changes) and when the panel closes.
+  const pageKeywords = useMemo(() => [...new Set(rows.map((r) => r.submitted.trim().toLowerCase()))], [rows]);
+  const geoProgress = geoJobs.reduce((sum, j) => sum + j.done, 0);
+  const geoCounts = useGeoCoverage(pageKeywords, network, `${geoProgress}:${geoJobs.length}:${geoKeyword === null}`);
 
   // Back to the top of the table whenever a different page arrives.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -744,8 +756,16 @@ export function ResultsView({
                 Export selected ({formatInt(selectedCount)})
               </button>
             )}
+            {selectedCount > 0 && (
+              <button type="button" className={btn("secondary", "sm")} onClick={() => setGeoBulkOpen(true)}>
+                <Globe size={14} aria-hidden />
+                Get geographical breakdown ({formatInt(selectedCount)})
+              </button>
+            )}
           </div>
         </div>
+
+        <GeoJobsStrip jobs={geoJobs} />
 
         {errorMessage !== null && (
           <div
@@ -894,6 +914,15 @@ export function ResultsView({
                             >
                               {r.submitted}
                             </button>
+                            {(geoCounts[r.submitted.trim().toLowerCase()] ?? 0) > 0 && (
+                              <span
+                                className="mt-0.5 mr-1.5 inline-flex items-center gap-1 rounded-full bg-accent-soft px-1.5 text-[11px] font-medium text-accent"
+                                title="Country breakdown stored this month. Click the keyword to open it."
+                              >
+                                <Globe size={10} aria-hidden />
+                                {geoCounts[r.submitted.trim().toLowerCase()]} countries
+                              </span>
+                            )}
                             {r.canonical && r.canonical.toLowerCase() !== r.submitted.toLowerCase() && (
                               <span className="block max-w-[320px] truncate text-xs text-text-muted" title={r.canonical}>
                                 → {r.canonical}
@@ -1028,6 +1057,19 @@ export function ResultsView({
           </nav>
         )}
       </Card>
+
+      {geoBulkOpen && (
+        <GeoBulkDialog
+          runId={runId}
+          selection={[...selectedKeys]}
+          onClose={() => setGeoBulkOpen(false)}
+          onStarted={(n) => {
+            setGeoBulkOpen(false);
+            setGeoNonce((v) => v + 1);
+            toast.success(`Country breakdown started for ${formatInt(n)} ${n === 1 ? "keyword" : "keywords"}.`);
+          }}
+        />
+      )}
 
       {geoKeyword !== null && (
         <GeoPanel key={geoKeyword} keyword={geoKeyword} network={network} onClose={() => setGeoKeyword(null)} />
