@@ -311,6 +311,16 @@ body {
   outline-color: var(--sidebar-accent);
 }
 
+/* Chip fields (CountryPicker): ring the whole field, not the small search
+   box inside it. */
+.chip-field input:focus-visible {
+  outline: none;
+}
+.chip-field:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /*
  * All numeric values: tabular figures so columns align. In the components
  * layer so a utility (e.g. text-2xl on a stat card) can override the size —

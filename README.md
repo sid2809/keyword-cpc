@@ -82,6 +82,18 @@ npm run dev          # http://localhost:3000
 | `npm run run:keywords` | Drive the runner from the CLI (see below) |
 | `npm run scan:secrets` | gitleaks over the staged diff (what the pre-commit hook runs) |
 | `npm run scan:secrets:all` | gitleaks over the full history |
+| `npm run build:countries -- <csv>` | Regenerate `src/lib/countries.ts` from Google's geo targets CSV (see below) |
+
+### Countries (Location picker)
+
+The Location picker offers every country Google Ads targets: 219 countries
+from Google's `geotargets-2026-10-06.csv`, stored in `src/lib/countries.ts`
+(generated, don't edit by hand). New search allows up to 10 countries per run
+(Google's limit per request); the Settings default is one country and must be
+on the list. To refresh after Google publishes a newer file, download "Latest
+zipped CSV" from https://developers.google.com/google-ads/api/data/geotargets,
+unzip it, and run `npm run build:countries -- path/to/geotargets-YYYY-MM-DD.csv`.
+The script keeps only Active countries and refuses a file in the wrong format.
 
 A pre-deploy audit of the whole application is recorded in
 [AUDIT.md](./AUDIT.md) — what was tested, the seven defects found and fixed, and

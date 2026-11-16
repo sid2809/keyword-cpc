@@ -13,7 +13,8 @@
     "prepare": "git config core.hooksPath .githooks || true",
     "scan:secrets": "gitleaks git --staged --redact --no-banner --config .gitleaks.toml",
     "scan:secrets:all": "gitleaks git --redact --no-banner --config .gitleaks.toml",
-    "run:keywords": "tsx --conditions=react-server scripts/run-keywords.ts"
+    "run:keywords": "tsx --conditions=react-server scripts/run-keywords.ts",
+    "build:countries": "tsx scripts/build-countries.ts"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

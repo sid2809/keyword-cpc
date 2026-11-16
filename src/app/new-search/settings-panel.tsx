@@ -5,20 +5,13 @@ import { Clock, Play } from "lucide-react";
 import { BTN_PRIMARY, CARD, CONTROL, Field, SegmentedControl } from "@/components/ui";
 import { estimateSeconds, formatDuration, formatInt } from "@/lib/format";
 import type { RunSettings } from "@/lib/types";
+import { CountryPicker } from "@/components/country-picker";
 
 /**
  * Settings for a new search, laid out as a compact grid under the keyword
  * input. The fields, options and hints are the same as before; only the
  * layout changed. The count and Run button live in <RunBar> below.
  */
-
-const GEO_OPTIONS = [
-  { value: "geoTargetConstants/2840", label: "United States" },
-  { value: "geoTargetConstants/2356", label: "India" },
-  { value: "geoTargetConstants/2826", label: "United Kingdom" },
-  { value: "geoTargetConstants/2036", label: "Australia" },
-  { value: "geoTargetConstants/2124", label: "Canada" },
-];
 
 const LANGUAGE_OPTIONS = [
   { value: "languageConstants/1000", label: "English" },
@@ -54,19 +47,12 @@ export function SettingsPanel({
       </div>
 
       <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Location" htmlFor="geo">
-          <select
+        <Field label="Location" htmlFor="geo" hint="Up to 10 countries. Results cover all chosen countries together.">
+          <CountryPicker
             id="geo"
-            className={CONTROL}
-            value={settings.geoTargetConstants[0] ?? ""}
-            onChange={(e) => onChange({ ...settings, geoTargetConstants: [e.target.value] })}
-          >
-            {GEO_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+            value={settings.geoTargetConstants}
+            onChange={(geoTargetConstants) => onChange({ ...settings, geoTargetConstants })}
+          />
         </Field>
 
         <Field label="Language" htmlFor="lang">

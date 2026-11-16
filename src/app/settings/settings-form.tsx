@@ -3,14 +3,7 @@
 import { useActionState, useState, useTransition } from "react";
 import { BTN_PRIMARY, BTN_SECONDARY, CONTROL, Card, Field } from "@/components/ui";
 import { testApiConnection, updateSettings, type ProbeState, type SettingsState } from "@/app/actions";
-
-const GEO_OPTIONS = [
-  { value: "geoTargetConstants/2840", label: "United States" },
-  { value: "geoTargetConstants/2356", label: "India" },
-  { value: "geoTargetConstants/2826", label: "United Kingdom" },
-  { value: "geoTargetConstants/2036", label: "Australia" },
-  { value: "geoTargetConstants/2124", label: "Canada" },
-];
+import { COUNTRIES } from "@/lib/countries";
 
 const LANGUAGE_OPTIONS = [
   { value: "languageConstants/1000", label: "English" },
@@ -59,9 +52,9 @@ export function SettingsForm({
 
         <Field label="Default location" htmlFor="geo">
           <select id="geo" name="geo" defaultValue={geo} className={`${CONTROL} w-full max-w-sm`}>
-            {GEO_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
+            {COUNTRIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </select>

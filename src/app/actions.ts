@@ -8,6 +8,7 @@ import { saveAppSettings } from "@/lib/app-settings";
 import { generateKeywordHistoricalMetrics, getAccountInfo } from "@/lib/google-ads";
 import { DEFAULT_SETTINGS } from "@/lib/run-settings";
 import { formatMicros } from "@/lib/format";
+import { countryById } from "@/lib/countries";
 
 /**
  * Server actions for Phase 4. Every one re-checks the session — a server action
@@ -58,9 +59,14 @@ export async function updateSettings(
     return { ok: false, message: "Threshold must be a positive whole number." };
   }
 
+  const defaultGeo = String(formData.get("geo") ?? "");
+  if (!countryById(defaultGeo)) {
+    return { ok: false, message: "Pick a default location from the list." };
+  }
+
   await saveAppSettings({
     liveModeThreshold: Math.floor(threshold),
-    defaultGeo: String(formData.get("geo") ?? ""),
+    defaultGeo,
     defaultLanguage: String(formData.get("language") ?? "") || null,
   });
 
