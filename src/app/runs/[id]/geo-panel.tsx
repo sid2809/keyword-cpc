@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Download, Globe, RefreshCw, X } from "lucide-react";
+import { Download, FolderPlus, Globe, RefreshCw, X } from "lucide-react";
 import { ProgressBar, btn } from "@/components/ui";
 import { countryById } from "@/lib/countries";
 import { GEO_ALL } from "@/lib/geo-shortlist";
@@ -70,10 +70,13 @@ export function GeoPanel({
   keyword,
   network,
   onClose,
+  onAddToProject,
 }: {
   keyword: string;
   network: RunSettings["network"];
   onClose: () => void;
+  /** Opens "Add to project" for this keyword; omitted where there is no run row. */
+  onAddToProject?: () => void;
 }) {
   const [data, setData] = useState<Breakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -152,7 +155,8 @@ export function GeoPanel({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      // A dialog opened on top of the panel (e.g. Add to project) handles Escape itself.
+      if (e.key === "Escape" && !document.querySelector('[aria-modal="true"]')) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -253,9 +257,17 @@ export function GeoPanel({
             Any language · {network === "GOOGLE_SEARCH" ? "Google Search" : "Google Search + partners"}
           </p>
         </div>
-        <button ref={closeRef} type="button" onClick={onClose} aria-label="Close country breakdown" className={btn("ghost", "icon")}>
-          <X size={16} aria-hidden />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {onAddToProject && (
+            <button type="button" onClick={onAddToProject} className={btn("secondary", "sm")}>
+              <FolderPlus size={14} aria-hidden />
+              Add to project
+            </button>
+          )}
+          <button ref={closeRef} type="button" onClick={onClose} aria-label="Close country breakdown" className={btn("ghost", "icon")}>
+            <X size={16} aria-hidden />
+          </button>
+        </div>
       </header>
 
       <div className="border-b border-border px-5 py-3">

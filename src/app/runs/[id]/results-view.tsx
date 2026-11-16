@@ -12,6 +12,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  FolderPlus,
   Globe,
   Search,
   SearchX,
@@ -33,6 +34,7 @@ import {
 import { CountUp } from "@/components/count-up";
 import { toast } from "@/components/toast";
 import { GeoPanel } from "./geo-panel";
+import { AddToProjectDialog } from "./add-to-project";
 import { GeoBulkDialog, GeoJobsStrip, useGeoCoverage, useGeoJobs } from "./geo-bulk";
 import { formatCompact, formatInt, formatMicros } from "@/lib/format";
 import { bandColorVar, bandFor, type HeatBands } from "@/lib/heat";
@@ -149,6 +151,10 @@ export function ResultsView({
   /** Keyword whose country breakdown panel is open, or null. */
   const [geoKeyword, setGeoKeyword] = useState<string | null>(null);
   const [geoBulkOpen, setGeoBulkOpen] = useState(false);
+  /** Row key of the keyword in the open panel, for "Add to project" there. */
+  const [geoRowKey, setGeoRowKey] = useState<string | null>(null);
+  /** Rows the "Add to project" dialog is open for, or null. */
+  const [projectAdd, setProjectAdd] = useState<{ selection: string[]; label: string } | null>(null);
   const [geoNonce, setGeoNonce] = useState(0);
   const geoJobs = useGeoJobs(geoNonce);
   const [hideNoData, setHideNoData] = useState(false);
@@ -757,6 +763,21 @@ export function ResultsView({
               </button>
             )}
             {selectedCount > 0 && (
+              <button
+                type="button"
+                className={btn("secondary", "sm")}
+                onClick={() =>
+                  setProjectAdd({
+                    selection: [...selectedKeys],
+                    label: `${formatInt(selectedCount)} selected ${selectedCount === 1 ? "row" : "rows"}`,
+                  })
+                }
+              >
+                <FolderPlus size={14} aria-hidden />
+                Add to project ({formatInt(selectedCount)})
+              </button>
+            )}
+            {selectedCount > 0 && (
               <button type="button" className={btn("secondary", "sm")} onClick={() => setGeoBulkOpen(true)}>
                 <Globe size={14} aria-hidden />
                 Get geographical breakdown ({formatInt(selectedCount)})
@@ -905,7 +926,10 @@ export function ResultsView({
                           <td className="px-4 py-2.5 text-sm">
                             <button
                               type="button"
-                              onClick={() => setGeoKeyword(r.submitted.trim().toLowerCase())}
+                              onClick={() => {
+                                setGeoKeyword(r.submitted.trim().toLowerCase());
+                                setGeoRowKey(key);
+                              }}
                               className={
                                 "block max-w-[320px] truncate rounded-[3px] text-left underline-offset-2 hover:text-accent hover:underline " +
                                 (r.noData ? "text-text-muted" : "text-text")
@@ -1058,6 +1082,15 @@ export function ResultsView({
         )}
       </Card>
 
+      {projectAdd !== null && (
+        <AddToProjectDialog
+          runId={runId}
+          selection={projectAdd.selection}
+          label={projectAdd.label}
+          onClose={() => setProjectAdd(null)}
+        />
+      )}
+
       {geoBulkOpen && (
         <GeoBulkDialog
           runId={runId}
@@ -1072,7 +1105,15 @@ export function ResultsView({
       )}
 
       {geoKeyword !== null && (
-        <GeoPanel key={geoKeyword} keyword={geoKeyword} network={network} onClose={() => setGeoKeyword(null)} />
+        <GeoPanel
+          key={geoKeyword}
+          keyword={geoKeyword}
+          network={network}
+          onClose={() => setGeoKeyword(null)}
+          onAddToProject={
+            geoRowKey === null ? undefined : () => setProjectAdd({ selection: [geoRowKey], label: `"${geoKeyword}"` })
+          }
+        />
       )}
 
       {exporting && (
