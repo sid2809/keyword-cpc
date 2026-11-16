@@ -135,7 +135,7 @@ export function GeoBulkDialog({
             );
           })}
           <p className="text-xs leading-5 text-text-muted">
-            Countries already scanned this month are skipped, so it can take fewer. It runs in the background and
+            Countries a keyword already has an answer for are skipped, so it can take fewer. It runs in the background and
             shares the 1 request per second limit with searches.
           </p>
           {error && (
@@ -239,7 +239,7 @@ export function GeoJobsStrip({ jobs }: { jobs: GeoJob[] }) {
 // --- which rows already have a breakdown ------------------------------------
 
 /**
- * Countries scanned this month for each of the given keywords (lower-cased).
+ * Countries scanned for each of the given keywords (lower-cased).
  * Re-fetched when the keywords change and whenever `refreshKey` changes.
  */
 export function useGeoCoverage(

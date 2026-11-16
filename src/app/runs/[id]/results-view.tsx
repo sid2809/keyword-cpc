@@ -917,7 +917,7 @@ export function ResultsView({
                             {(geoCounts[r.submitted.trim().toLowerCase()] ?? 0) > 0 && (
                               <span
                                 className="mt-0.5 mr-1.5 inline-flex items-center gap-1 rounded-full bg-accent-soft px-1.5 text-[11px] font-medium text-accent"
-                                title="Country breakdown stored this month. Click the keyword to open it."
+                                title="Country breakdown stored. Click the keyword to open it."
                               >
                                 <Globe size={10} aria-hidden />
                                 {geoCounts[r.submitted.trim().toLowerCase()]} countries

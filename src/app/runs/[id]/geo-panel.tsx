@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Globe, RefreshCw, X } from "lucide-react";
 import { ProgressBar, btn } from "@/components/ui";
 import { countryById } from "@/lib/countries";
@@ -11,15 +11,20 @@ import type { RunSettings } from "@/lib/types";
 /**
  * Side panel: one keyword's metrics per country (lib/geo-breakdown.ts).
  *
- * Opening it shows whatever is already stored for the keyword this month and,
- * if the shortlist isn't complete, starts a background job for it. The panel
- * polls once a second while a job runs, so countries appear as Google answers.
+ * Opening it shows whatever is already stored for the keyword and, if the
+ * shortlist isn't complete, starts a background job for it. The panel polls
+ * once a second while a job runs, so countries appear as Google answers.
  * Closing the panel does not stop the job. "Scan all countries" fetches the
  * rest. The table underneath stays usable; nothing reloads.
+ *
+ * Answers are kept forever and never re-fetched on their own. "Refresh" asks
+ * the scanned countries again and adds the new answers; "Show latest only"
+ * (on by default) hides the older ones.
  */
 
 type Row = {
   geo: string;
+  fetchedAt: string;
   noData: boolean;
   avgMonthlySearches: number | null;
   highTopMicros: number | null;
@@ -32,6 +37,7 @@ type Row = {
 type Breakdown = {
   keyword: string;
   rows: Row[];
+  older: Row[];
   shortlistScanned: number;
   shortlistTotal: number;
   allScanned: number;
@@ -40,6 +46,7 @@ type Breakdown = {
     id: string;
     status: "queued" | "running" | "done" | "failed";
     scope: "shortlist" | "all";
+    force: boolean;
     done: number;
     total: number;
     error: string | null;
@@ -47,6 +54,11 @@ type Breakdown = {
 };
 
 const POLL_MS = 1000;
+
+const DAY = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
+function day(iso: string): string {
+  return DAY.format(new Date(iso));
+}
 
 function csvCell(v: string | number | null): string {
   if (v === null) return "";
@@ -66,24 +78,27 @@ export function GeoPanel({
   const [data, setData] = useState<Breakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [latestOnly, setLatestOnly] = useState(true);
   const autoStarted = useRef(false);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async (): Promise<Breakdown | null> => {
-    const res = await fetch(`/api/geo?${new URLSearchParams({ keyword, network })}`, { cache: "no-store" });
+    const params = new URLSearchParams({ keyword, network });
+    if (!latestOnly) params.set("history", "1");
+    const res = await fetch(`/api/geo?${params}`, { cache: "no-store" });
     if (!res.ok) throw new Error(`Could not load the breakdown (${res.status}).`);
     return (await res.json()) as Breakdown;
-  }, [keyword, network]);
+  }, [keyword, network, latestOnly]);
 
   const start = useCallback(
-    async (scope: "shortlist" | "all") => {
+    async (scope: "shortlist" | "all", force = false) => {
       setStarting(true);
       setError(null);
       try {
         const res = await fetch("/api/geo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ keywords: [keyword], network, scope }),
+          body: JSON.stringify({ keywords: [keyword], network, scope, force }),
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -156,22 +171,40 @@ export function GeoPanel({
     };
   }, [data]);
 
+  const olderByGeo = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    for (const r of data?.older ?? []) map.set(r.geo, [...(map.get(r.geo) ?? []), r]);
+    return map;
+  }, [data]);
+
+  const fetchedRange = useMemo(() => {
+    const times = (data?.rows ?? []).map((r) => r.fetchedAt).sort();
+    if (times.length === 0) return null;
+    const first = day(times[0]);
+    const last = day(times[times.length - 1]);
+    return first === last ? last : `${first} to ${last}`;
+  }, [data]);
+
   function exportCsv() {
     if (!data) return;
     const order = new Map(GEO_ALL.map((c, i) => [c.id, i]));
     const lines = [
-      ["Keyword", "Country", "Country code", "Avg monthly searches", "Share of scanned countries (%)", "High top-of-page bid", "Low top-of-page bid", "Average CPC", "Competition", "Competition index"].join(","),
-      ...[...withData, ...[...withoutData].sort((a, b) => (order.get(a.geo) ?? 0) - (order.get(b.geo) ?? 0))].map((r) => {
+      ["Keyword", "Country", "Country code", "Fetched", "Latest", "Avg monthly searches", "Share of scanned countries (%)", "High top-of-page bid", "Low top-of-page bid", "Average CPC", "Competition", "Competition index"].join(","),
+      ...[...withData, ...[...withoutData].sort((a, b) => (order.get(a.geo) ?? 0) - (order.get(b.geo) ?? 0))]
+        .flatMap((r) => [{ r, latest: true }, ...(latestOnly ? [] : (olderByGeo.get(r.geo) ?? []).map((o) => ({ r: o, latest: false })))])
+        .map(({ r, latest }) => {
         const c = countryById(r.geo);
         const micros = (v: number | null) => (v === null ? null : v / 1_000_000);
         const share =
-          !r.noData && r.avgMonthlySearches !== null && totalSearches > 0
+          latest && !r.noData && r.avgMonthlySearches !== null && totalSearches > 0
             ? Math.round((r.avgMonthlySearches / totalSearches) * 1000) / 10
             : null;
         return [
           data.keyword,
           c?.name ?? r.geo,
           c?.code ?? "",
+          r.fetchedAt.slice(0, 10),
+          latest ? "yes" : "no",
           r.noData ? null : r.avgMonthlySearches,
           share,
           micros(r.highTopMicros),
@@ -194,7 +227,12 @@ export function GeoPanel({
 
   const job = data?.job ?? null;
   const remaining = data ? data.allTotal - data.allScanned : 0;
-  const canScanAll = data !== null && !active && !starting && remaining > 0 && data.shortlistScanned >= data.shortlistTotal;
+  const idle = data !== null && !active && !starting;
+  const canScanAll = idle && remaining > 0 && data.shortlistScanned >= data.shortlistTotal;
+  // Refresh re-asks what has been scanned: the shortlist, or everything once past it.
+  const refreshScope: "shortlist" | "all" = data !== null && data.allScanned > data.shortlistTotal ? "all" : "shortlist";
+  const refreshCost = refreshScope === "all" ? (data?.allTotal ?? 0) : (data?.shortlistTotal ?? 0);
+  const canRefresh = idle && data.shortlistScanned >= data.shortlistTotal;
 
   return (
     <aside
@@ -225,7 +263,7 @@ export function GeoPanel({
           <div aria-live="polite">
             <div className="mb-1.5 flex justify-between text-xs text-text-secondary">
               <span>
-                Asking Google: {job.done} of {job.total} countries
+                {job.force ? "Refreshing" : "Asking Google"}: {job.done} of {job.total} countries
               </span>
               <span>about {formatDuration(Math.max(1, job.total - job.done))} left</span>
             </div>
@@ -236,7 +274,8 @@ export function GeoPanel({
             <p className="text-xs text-text-secondary" aria-live="polite">
               {data === null
                 ? "Loading…"
-                : `${data.allScanned} of ${data.allTotal} countries scanned this month`}
+                : `${data.allScanned} of ${data.allTotal} countries scanned` +
+                  (fetchedRange ? ` · fetched ${fetchedRange}` : "")}
             </p>
             <div className="flex items-center gap-2">
               {canScanAll && (
@@ -245,6 +284,17 @@ export function GeoPanel({
                   <span className="text-text-muted">
                     ({remaining} more, about {formatDuration(remaining)})
                   </span>
+                </button>
+              )}
+              {canRefresh && (
+                <button
+                  type="button"
+                  onClick={() => void start(refreshScope, true)}
+                  className={btn("secondary", "sm")}
+                  title={`Ask Google again for ${refreshCost} countries (${refreshCost} requests, about ${formatDuration(refreshCost)}). Older answers are kept.`}
+                >
+                  <RefreshCw size={14} aria-hidden />
+                  Refresh
                 </button>
               )}
               <button
@@ -264,7 +314,7 @@ export function GeoPanel({
             <span>{error ?? `The scan stopped: ${job?.error ?? "unknown error"}`}</span>
             <button
               type="button"
-              onClick={() => void start(job?.scope ?? "shortlist")}
+              onClick={() => void start(job?.scope ?? "shortlist", job?.force ?? false)}
               className="inline-flex shrink-0 items-center gap-1 font-medium text-text hover:text-accent"
             >
               <RefreshCw size={12} aria-hidden />
@@ -273,6 +323,21 @@ export function GeoPanel({
           </div>
         )}
       </div>
+
+      <label className="flex items-center gap-2 border-b border-border px-5 py-2 text-xs text-text-secondary">
+        <input
+          type="checkbox"
+          checked={latestOnly}
+          onChange={(e) => setLatestOnly(e.target.checked)}
+          className="h-3.5 w-3.5 accent-[var(--accent)]"
+        />
+        Show latest only
+        {!latestOnly && data !== null && (
+          <span className="text-text-muted">
+            · {data.older.length === 0 ? "no older fetches yet" : `${data.older.length} older ${data.older.length === 1 ? "answer" : "answers"} shown`}
+          </span>
+        )}
+      </label>
 
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse text-left">
@@ -291,7 +356,8 @@ export function GeoPanel({
             {withData.map((r) => {
               const share = totalSearches > 0 ? ((r.avgMonthlySearches ?? 0) / totalSearches) * 100 : 0;
               return (
-                <tr key={r.geo} className="row-in border-b border-border last:border-0">
+                <Fragment key={r.geo}>
+                <tr className="row-in border-b border-border last:border-0">
                   <td className="px-5 py-2 text-sm text-text">
                     {countryById(r.geo)?.name ?? r.geo}
                     {r.competition && (
@@ -314,6 +380,17 @@ export function GeoPanel({
                   <td className="num px-3 py-2 text-right text-text-secondary">{formatMicros(r.highTopMicros)}</td>
                   <td className="num py-2 pr-5 pl-3 text-right text-text-secondary">{formatMicros(r.lowTopMicros)}</td>
                 </tr>
+                {!latestOnly &&
+                  (olderByGeo.get(r.geo) ?? []).map((o) => (
+                    <tr key={`${o.geo}-${o.fetchedAt}`} className="border-b border-border bg-subtle/60 text-text-muted">
+                      <td className="py-1.5 pr-3 pl-9 text-xs">{day(o.fetchedAt)}</td>
+                      <td className="num px-3 py-1.5 text-right text-xs">{o.noData ? "No data" : formatInt(o.avgMonthlySearches)}</td>
+                      <td />
+                      <td className="num px-3 py-1.5 text-right text-xs">{formatMicros(o.highTopMicros)}</td>
+                      <td className="num py-1.5 pr-5 pl-3 text-right text-xs">{formatMicros(o.lowTopMicros)}</td>
+                    </tr>
+                  ))}
+                </Fragment>
               );
             })}
             {data !== null && withData.length === 0 && !active && (

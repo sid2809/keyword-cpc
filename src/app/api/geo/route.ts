@@ -11,9 +11,10 @@ import {
 /**
  * Country breakdown for keywords.
  *
- *   GET  /api/geo?keyword=…&network=…   what is known for one keyword + job progress
- *   POST /api/geo  { keywords: string[], network, scope: "shortlist" | "all" }
- *        starts (or joins) a background job; returns its id.
+ *   GET  /api/geo?keyword=…&network=…[&history=1]
+ *        newest answer per country + job progress; history=1 adds older answers
+ *   POST /api/geo  { keywords: string[], network, scope: "shortlist" | "all", force?: boolean }
+ *        starts (or joins) a background job; force = refresh (ask again).
  */
 export async function GET(request: Request) {
   if (!(await getSession())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
   if (!keyword) return NextResponse.json({ error: "keyword is required." }, { status: 400 });
   if (!isGeoNetwork(network)) return NextResponse.json({ error: "Unknown network." }, { status: 400 });
 
-  return NextResponse.json(await getGeoBreakdown(keyword, network), { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json(await getGeoBreakdown(keyword, network, sp.get("history") === "1"), { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -48,6 +49,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "scope must be shortlist or all." }, { status: 400 });
   }
 
-  const job = await startGeoJob({ keywords, network: b.network, scope: b.scope });
+  const job = await startGeoJob({ keywords, network: b.network, scope: b.scope, force: b.force === true });
   return NextResponse.json({ jobId: job.id }, { status: 202 });
 }

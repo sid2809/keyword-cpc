@@ -104,9 +104,11 @@ Google's API has no per-country breakdown, so the app asks once per country
 side panel that scans a 30-country shortlist (`src/lib/geo-shortlist.ts`,
 about 30 seconds) and offers "Scan all countries" for the other 189. Requests
 use Any language and the run's network, share the 1 request/second limit with
-runs, and are stored per (keyword, network, country) in `keyword_geo_metrics`
-for the calendar month, so reopening is free. Jobs live in `geo_jobs` and
-resume after a restart (migration 006).
+runs, and are stored in `keyword_geo_metrics` forever: one row per fetch, never
+re-fetched automatically, so reopening is free. "Refresh" asks the scanned
+countries again and adds the new answers; "Show latest only" (on by default)
+hides older ones. Jobs live in `geo_jobs` and resume after a restart
+(migrations 006, 007).
 
 Selecting rows shows "Get geographical breakdown": one job for all selected
 keywords (up to 50,000), costing one request per country per 5,000 keywords.
