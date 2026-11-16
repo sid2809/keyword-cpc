@@ -33,18 +33,27 @@ export const DEFAULT_SETTINGS: RunSettings = {
 const GEO_RE = /^geoTargetConstants\/\d+$/;
 const LANG_RE = /^languageConstants\/\d+$/;
 
+/**
+ * Geo targets: up to 10 (the API's cap). An explicit empty list means
+ * Worldwide: Google's GenerateKeywordHistoricalMetricsRequest documents that
+ * "an empty list MAY be used to specify all targeting geos". A missing value,
+ * or a non-empty list with nothing valid in it, falls back to the default, so
+ * malformed input never silently turns into a worldwide run.
+ */
+function normaliseGeo(value: unknown): string[] {
+  if (!Array.isArray(value)) return DEFAULT_SETTINGS.geoTargetConstants;
+  if (value.length === 0) return [];
+  const valid = value.filter((g): g is string => typeof g === "string" && GEO_RE.test(g));
+  return valid.length > 0 ? [...new Set(valid)].slice(0, 10) : DEFAULT_SETTINGS.geoTargetConstants;
+}
+
 export function withDefaults(partial: Partial<RunSettings> | null | undefined): RunSettings {
   if (typeof partial !== "object" || partial === null || Array.isArray(partial)) {
     return { ...DEFAULT_SETTINGS };
   }
 
-  const geo = Array.isArray(partial.geoTargetConstants)
-    ? partial.geoTargetConstants.filter((g): g is string => typeof g === "string" && GEO_RE.test(g))
-    : [];
-
   return {
-    // The API caps geo targets at 10 per request.
-    geoTargetConstants: geo.length > 0 ? geo.slice(0, 10) : DEFAULT_SETTINGS.geoTargetConstants,
+    geoTargetConstants: normaliseGeo(partial.geoTargetConstants),
     language:
       partial.language === null
         ? null

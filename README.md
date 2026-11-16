@@ -86,11 +86,13 @@ npm run dev          # http://localhost:3000
 
 ### Countries (Location picker)
 
-The Location picker offers every country Google Ads targets: 219 countries
-from Google's `geotargets-2026-10-06.csv`, stored in `src/lib/countries.ts`
-(generated, don't edit by hand). New search allows up to 10 countries per run
-(Google's limit per request); the Settings default is one country and must be
-on the list. To refresh after Google publishes a newer file, download "Latest
+The Location picker offers Worldwide plus every country Google Ads targets:
+219 countries from Google's `geotargets-2026-10-06.csv`, stored in
+`src/lib/countries.ts` (generated, don't edit by hand). New search allows
+Worldwide or up to 10 countries per run (Google's limit per request). Worldwide
+is an empty country list, which the request leaves out: Google documents that
+"an empty list MAY be used to specify all targeting geos". The Settings default
+is Worldwide (stored as an empty string) or one country from the list. To refresh after Google publishes a newer file, download "Latest
 zipped CSV" from https://developers.google.com/google-ads/api/data/geotargets,
 unzip it, and run `npm run build:countries -- path/to/geotargets-YYYY-MM-DD.csv`.
 The script keeps only Active countries and refuses a file in the wrong format.

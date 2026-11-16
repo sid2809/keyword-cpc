@@ -59,8 +59,9 @@ export async function updateSettings(
     return { ok: false, message: "Threshold must be a positive whole number." };
   }
 
+  // "" = Worldwide; otherwise it must be one of Google's countries.
   const defaultGeo = String(formData.get("geo") ?? "");
-  if (!countryById(defaultGeo)) {
+  if (defaultGeo !== "" && !countryById(defaultGeo)) {
     return { ok: false, message: "Pick a default location from the list." };
   }
 

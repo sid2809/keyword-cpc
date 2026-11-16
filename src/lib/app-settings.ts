@@ -14,6 +14,7 @@ import type { RunSettings } from "./types";
 
 export type AppSettings = {
   liveModeThreshold: number;
+  /** One country's geo target id, or "" for Worldwide. */
   defaultGeo: string;
   defaultLanguage: string | null;
 };
@@ -31,6 +32,7 @@ export async function getAppSettings(): Promise<AppSettings> {
   const row = rows[0];
   return {
     liveModeThreshold: row?.live_mode_threshold ?? env.liveModeThreshold,
+    // "" is stored on purpose and means Worldwide; never having chosen means US.
     defaultGeo: row?.default_geo ?? US_GEO,
     // An explicitly stored empty string means "unset the language" — distinct
     // from never having chosen, which falls back to English.
@@ -58,7 +60,7 @@ export async function defaultRunSettings(): Promise<RunSettings> {
   const app = await getAppSettings();
   return {
     ...DEFAULT_SETTINGS,
-    geoTargetConstants: [app.defaultGeo],
+    geoTargetConstants: app.defaultGeo === "" ? [] : [app.defaultGeo],
     language: app.defaultLanguage,
   };
 }

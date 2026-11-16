@@ -47,7 +47,7 @@ export function SettingsPanel({
       </div>
 
       <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Location" htmlFor="geo" hint="Up to 10 countries. Results cover all chosen countries together.">
+        <Field label="Location" htmlFor="geo" hint="Worldwide, or up to 10 countries (results cover them together).">
           <CountryPicker
             id="geo"
             value={settings.geoTargetConstants}

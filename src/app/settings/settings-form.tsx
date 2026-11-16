@@ -52,6 +52,7 @@ export function SettingsForm({
 
         <Field label="Default location" htmlFor="geo">
           <select id="geo" name="geo" defaultValue={geo} className={`${CONTROL} w-full max-w-sm`}>
+            <option value="">Worldwide (all locations)</option>
             {COUNTRIES.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}

@@ -303,7 +303,6 @@ export async function generateKeywordHistoricalMetrics(
   const range = yearMonthRange(settings.monthsBack);
   const body: Record<string, unknown> = {
     keywords,
-    geoTargetConstants: settings.geoTargetConstants,
     keywordPlanNetwork: settings.network,
     includeAdultKeywords: settings.includeAdultKeywords,
     historicalMetricsOptions: {
@@ -317,6 +316,9 @@ export async function generateKeywordHistoricalMetrics(
     },
   };
   if (settings.language) body.language = settings.language;
+  // No geo targets = Worldwide: the field is left out, per the API docs
+  // ("an empty list MAY be used to specify all targeting geos").
+  if (settings.geoTargetConstants.length > 0) body.geoTargetConstants = settings.geoTargetConstants;
 
   const json = await post<RawResponse>(
     `customers/${env.googleAds.customerId}:generateKeywordHistoricalMetrics`,
