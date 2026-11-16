@@ -11,6 +11,8 @@ import {
   CircleAlert,
   Download,
   FolderKanban,
+  Globe,
+  RefreshCw,
   Search,
   SearchX,
   Trash2,
@@ -18,6 +20,9 @@ import {
 import { CONTROL_SM, Card, EmptyState, Skeleton, btn } from "@/components/ui";
 import { toast } from "@/components/toast";
 import { Sparkline } from "@/app/runs/[id]/sparkline";
+import { GeoPanel } from "@/app/runs/[id]/geo-panel";
+import { GeoJobsStrip, useGeoJobs } from "@/app/runs/[id]/geo-bulk";
+import { ProjectActionDialog, RefreshStrip, useProjectJob, type ActionTarget } from "./project-actions";
 import { countryById } from "@/lib/countries";
 import { languageName } from "@/lib/languages";
 import { formatInt, formatMicros } from "@/lib/format";
@@ -90,6 +95,18 @@ export function ProjectView({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removing, setRemoving] = useState(false);
+
+  // Refresh numbers / country breakdown
+  const [action, setAction] = useState<"refresh" | "geo" | null>(null);
+  const [jobNonce, setJobNonce] = useState(0);
+  const [geoNonce, setGeoNonce] = useState(0);
+  const [panel, setPanel] = useState<{ keyword: string; network: string } | null>(null);
+  const refreshJob = useProjectJob(projectId, jobNonce, () => {
+    setNonce((v) => v + 1); // new numbers in the table
+    router.refresh();
+  });
+  const geoJobs = useGeoJobs(geoNonce);
+  const refreshActive = refreshJob !== null && refreshJob.status !== "failed";
 
   const typed = useMemo(
     () => ({ minSearches: wholeNumber(minVol), minHighTopMicros: rupeesToMicros(minBid), maxHighTopMicros: rupeesToMicros(maxBid) }),
@@ -218,6 +235,20 @@ export function ProjectView({
       setRemoving(false);
     }
   }
+
+  // Actions apply to the selection if there is one, else to the current filters.
+  const filterParams = (() => {
+    const p = projectQueryToParams({ ...DEFAULT_PROJECT_QUERY, filters: query.filters });
+    return p.toString();
+  })();
+  const actionTarget: ActionTarget = selected.size > 0 ? { ids: [...selected] } : { filters: filterParams };
+  const actionLabel =
+    selected.size > 0
+      ? `${formatInt(selected.size)} selected ${selected.size === 1 ? "keyword" : "keywords"}`
+      : filtersOn
+        ? "every keyword matching the filters"
+        : "the whole project";
+  const actionSuffix = selected.size > 0 ? ` (${formatInt(selected.size)})` : filtersOn ? " (filtered)" : "";
 
   const exportHref = (format: "csv" | "xlsx") => {
     const p = projectQueryToParams(query);
@@ -374,6 +405,20 @@ export function ProjectView({
                   Remove from project ({formatInt(selected.size)})
                 </button>
               ))}
+            <button
+              type="button"
+              onClick={() => setAction("refresh")}
+              disabled={refreshActive}
+              title={refreshActive ? "A refresh is already running for this project" : undefined}
+              className={btn("secondary", "sm")}
+            >
+              <RefreshCw size={14} aria-hidden />
+              Refresh numbers{actionSuffix}
+            </button>
+            <button type="button" onClick={() => setAction("geo")} className={btn("secondary", "sm")}>
+              <Globe size={14} aria-hidden />
+              Country breakdown{actionSuffix}
+            </button>
             <a href={exportHref("csv")} className={btn("secondary", "sm")}>
               <Download size={14} aria-hidden />
               CSV
@@ -384,6 +429,9 @@ export function ProjectView({
             </a>
           </div>
         </div>
+
+        <RefreshStrip job={refreshJob} />
+        <GeoJobsStrip jobs={geoJobs} />
 
         {error && (
           <div role="alert" className="flex items-center justify-between gap-3 border-b border-border bg-heat-red-soft px-4 py-2.5">
@@ -455,9 +503,17 @@ export function ProjectView({
                           />
                         </td>
                         <td className="px-4 py-2.5 text-sm">
-                          <span className={"block max-w-[280px] truncate " + (r.latest && !r.noData ? "text-text" : "text-text-muted")} title={r.keyword}>
+                          <button
+                            type="button"
+                            onClick={() => setPanel({ keyword: r.keyword.toLowerCase(), network: r.network })}
+                            title={`${r.keyword} — country breakdown`}
+                            className={
+                              "block max-w-[280px] cursor-pointer truncate rounded-[4px] text-left hover:text-accent hover:underline " +
+                              (r.latest && !r.noData ? "text-text" : "text-text-muted")
+                            }
+                          >
                             {r.keyword}
-                          </span>
+                          </button>
                           {r.noData && (
                             <span className="mt-0.5 mr-1.5 inline-block rounded-full bg-subtle px-1.5 text-[11px] font-medium text-text-muted">
                               No data
@@ -569,6 +625,36 @@ export function ProjectView({
           </div>
         </div>
       </Card>
+
+      {action && (
+        <ProjectActionDialog
+          projectId={projectId}
+          kind={action}
+          target={actionTarget}
+          targetLabel={actionLabel}
+          onClose={() => setAction(null)}
+          onStarted={(kind, count) => {
+            setAction(null);
+            const what = `${formatInt(count)} ${count === 1 ? "keyword" : "keywords"}`;
+            if (kind === "refresh") {
+              setJobNonce((v) => v + 1);
+              toast.success(`Refreshing ${what}. New numbers appear here when it finishes.`);
+            } else {
+              setGeoNonce((v) => v + 1);
+              toast.success(`Country breakdown started for ${what}. Click a keyword to see it.`);
+            }
+          }}
+        />
+      )}
+
+      {panel && (
+        <GeoPanel
+          key={`${panel.keyword}|${panel.network}`}
+          keyword={panel.keyword}
+          network={panel.network === "GOOGLE_SEARCH_AND_PARTNERS" ? "GOOGLE_SEARCH_AND_PARTNERS" : "GOOGLE_SEARCH"}
+          onClose={() => setPanel(null)}
+        />
+      )}
     </div>
   );
 }

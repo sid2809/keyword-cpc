@@ -38,4 +38,14 @@ export async function register() {
     .catch((err) => {
       console.error("[geo] boot resume failed:", err instanceof Error ? err.message : err);
     });
+
+  // Project "Refresh numbers" jobs too (project-refresh.ts).
+  const { resumeInterruptedProjectJobs } = await import("./lib/project-refresh");
+  void resumeInterruptedProjectJobs()
+    .then((n) => {
+      if (n > 0) console.log(`[project] resumed ${n} interrupted refresh job(s) at boot`);
+    })
+    .catch((err) => {
+      console.error("[project] boot resume failed:", err instanceof Error ? err.message : err);
+    });
 }

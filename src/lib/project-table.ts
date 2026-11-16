@@ -252,3 +252,29 @@ export async function removeProjectEntries(projectId: string, entryIds: string[]
   if (rows.length > 0) await query("update projects set updated_at = now() where id = $1", [projectId]);
   return rows.length;
 }
+
+/**
+ * Ids of the entries an action applies to: the given ids (limited to this
+ * project), or every entry whose LATEST numbers match the filters.
+ */
+export async function resolveProjectEntryIds(
+  projectId: string,
+  target: { ids: string[] } | { filters: ProjectFilters },
+): Promise<string[]> {
+  if (!isRunId(projectId)) return [];
+  if ("ids" in target) {
+    const ids = target.ids.filter((id) => /^\d+$/.test(id));
+    if (ids.length === 0) return [];
+    const rows = await query<{ id: string }>(
+      "select id from project_keywords where project_id = $1 and id = any($2::bigint[]) order by id",
+      [projectId, ids],
+    );
+    return rows.map((r) => String(r.id));
+  }
+  const p = new Params([projectId]);
+  const rows = await query<{ id: string }>(
+    `select pk.id from ${source(true)} where ${where(target.filters, p)} order by pk.id`,
+    p.values,
+  );
+  return rows.map((r) => String(r.id));
+}
