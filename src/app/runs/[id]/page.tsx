@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { getSession } from "@/lib/session";
 import { getRun } from "@/lib/runner";
-import { discoveryIsIncomplete } from "@/lib/discover";
+import { discoveryIsIncomplete, getRunSeeds } from "@/lib/discover";
 import { isRunId } from "@/lib/compare";
 import { getRunSummary } from "@/lib/results";
 import { getResultsOverview, getResultsPage } from "@/lib/results-table";
@@ -29,6 +29,8 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
 
   const settings = withDefaults(run.settings);
   const finished = run.status === "done";
+  // What each seed of a discovery returned; empty for any other run.
+  const seeds = finished && run.source === "discover" ? await getRunSeeds(run.id) : [];
   // A discovery that is still asking Google counts its progress in seeds.
   const unit =
     !finished && run.source === "discover" && (await discoveryIsIncomplete(run.id)) ? "seeds" : "keywords";
@@ -102,6 +104,7 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
             hasUpload={Number(uploadRows[0]?.n ?? 0) > 0}
             hasDeltas={run.refresh_count > 0}
             hasUrls={uploadRows[0]?.has_urls ?? false}
+            seeds={seeds}
           />
         ) : run.status === "failed" ? (
           <FailedRun

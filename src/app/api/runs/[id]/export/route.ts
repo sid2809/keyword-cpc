@@ -1,5 +1,7 @@
 import { getSession } from "@/lib/session";
 import { getRun } from "@/lib/runner";
+import { getRunSeeds } from "@/lib/discover";
+import { seedLabel } from "@/lib/discover-seeds";
 import { withDefaults } from "@/lib/run-settings";
 import {
   buildExportGrid,
@@ -20,12 +22,17 @@ type ExportOptions = {
 async function respond(
   runId: string,
   opts: ExportOptions,
-  run: { name: string | null; settings: RunSettings },
+  run: { name: string | null; settings: RunSettings; source: string },
 ) {
   // No mode given means the run's own setting, as it always did.
   const mode = opts.mode ?? withDefaults(run.settings).dedupMode;
   const runName = run.name;
-  const grid = await buildExportGrid(runId, opts.columns, mode, opts.selection);
+  // The Seed column shows what the user entered for the seed, not its number.
+  const seedLabels =
+    run.source === "discover" && opts.columns.includes("seed")
+      ? new Map((await getRunSeeds(runId)).map((s) => [s.position, seedLabel(s)]))
+      : undefined;
+  const grid = await buildExportGrid(runId, opts.columns, mode, opts.selection, seedLabels);
   const filename = exportFilename(runName, runId, opts.format);
 
   if (opts.format === "xlsx") {

@@ -45,6 +45,11 @@ export type ResultsFilters = {
   minVolume: number | null;
   competition: Competition | null;
   hideNoData: boolean;
+  /**
+   * Discoveries only: keep the rows one seed produced (run_seeds.position).
+   * null = every seed. On any other run no row has a seed, so nothing matches.
+   */
+  seed: number | null;
 };
 
 export const EMPTY_FILTERS: ResultsFilters = {
@@ -55,6 +60,7 @@ export const EMPTY_FILTERS: ResultsFilters = {
   minVolume: null,
   competition: null,
   hideNoData: false,
+  seed: null,
 };
 
 export const PAGE_SIZES = [50, 100, 250, 500] as const;
@@ -88,7 +94,8 @@ export function filtersActive(f: ResultsFilters): boolean {
     f.maxHighTopMicros !== null ||
     f.minVolume !== null ||
     f.competition !== null ||
-    f.bucket !== null
+    f.bucket !== null ||
+    f.seed !== null
   );
 }
 
@@ -144,6 +151,7 @@ export function parseFilters(params: URLSearchParams): ResultsFilters {
     minVolume: parseIntParam(params, "minVolume", 0),
     competition,
     hideNoData: hide === "1",
+    seed: parseIntParam(params, "seed", 0),
   };
 }
 
@@ -178,6 +186,7 @@ export function filtersToParams(f: ResultsFilters, out = new URLSearchParams()):
   if (f.minVolume !== null) out.set("minVolume", String(f.minVolume));
   if (f.competition !== null) out.set("competition", f.competition);
   if (f.hideNoData) out.set("hideNoData", "1");
+  if (f.seed !== null) out.set("seed", String(f.seed));
   return out;
 }
 

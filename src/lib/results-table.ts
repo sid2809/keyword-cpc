@@ -39,8 +39,13 @@ import {
  * columns held in the covering indexes from migration 005, so Postgres can
  * answer from the indexes alone. "full" adds the wide columns and is only ever
  * read for the rows of one page or one batch.
+ *
+ * `withSeed` adds the seed column to the NARROW form, for the seed filter. It
+ * is off by default because seed_position is not in the covering index: reading
+ * it for every row would cost ordinary runs their index-only scan. The full
+ * form always carries it.
  */
-function rowSource(mode: DedupMode, width: "narrow" | "full"): string {
+function rowSource(mode: DedupMode, width: "narrow" | "full", withSeed = false): string {
   const metrics = `m.average_cpc_micros, m.avg_monthly_searches, m.competition, m.competition_index,
              m.low_top_micros, m.high_top_micros`;
   const wide =
@@ -57,6 +62,7 @@ function rowSource(mode: DedupMode, width: "narrow" | "full"): string {
              m.canonical_text                   as canonical,
              ${width === "full" ? "k.url" : "null::text"} as url,
              ${width === "full" ? "k.source_row" : "null::integer"} as source_row,
+             ${width === "full" || withSeed ? "k.seed_position" : "null::integer"} as seed,
              ${metrics},
              coalesce(m.no_data, true)          as no_data${wide}
         from run_keywords k
@@ -70,6 +76,7 @@ function rowSource(mode: DedupMode, width: "narrow" | "full"): string {
              m.canonical_text                   as canonical,
              null::text                         as url,
              null::integer                      as source_row,
+             null::integer                      as seed,
              ${metrics},
              m.no_data                          as no_data${wide}
         from keyword_metrics m
@@ -121,6 +128,9 @@ function whereClause(f: ResultsFilters, p: Params): string {
 
   if (f.minVolume !== null) clauses.push(`coalesce(r.avg_monthly_searches, 0) >= ${p.add(f.minVolume)}`);
 
+  // Needs rowSource(..., withSeed = true) in the narrow form.
+  if (f.seed !== null) clauses.push(`r.seed = ${p.add(f.seed)}`);
+
   return clauses.length === 0 ? "" : `where ${clauses.join(" and ")}`;
 }
 
@@ -171,6 +181,7 @@ type DbRow = {
   url: string | null;
   /** Index into the uploaded sheet's rows (intact runs from a sheet), else null. */
   source_row: number | null;
+  seed: number | null;
   average_cpc_micros: string | null;
   avg_monthly_searches: string | null;
   competition: string | null;
@@ -195,6 +206,7 @@ function toResultRow(r: DbRow, urls: string[]): ResultRow {
     submitted: r.submitted,
     canonical: r.canonical,
     position: r.position,
+    seed: r.seed ?? null,
     averageCpcMicros: big(r.average_cpc_micros),
     avgMonthlySearches: big(r.avg_monthly_searches),
     competition: r.competition,
@@ -282,7 +294,7 @@ export async function getResultsPage(
   const countParams = new Params([runId]);
   const countWhere = whereClause(q.filters, countParams);
   const [{ n }] = await query<{ n: string }>(
-    `select count(*)::text as n from (${rowSource(mode, "narrow")}) r ${countWhere}`,
+    `select count(*)::text as n from (${rowSource(mode, "narrow", q.filters.seed !== null)}) r ${countWhere}`,
     countParams.values,
   );
   const total = Number(n);
@@ -299,7 +311,7 @@ export async function getResultsPage(
   // Sort and page on the narrow columns, then widen just this page's rows.
   const ids = await query<RowId>(
     `select r.position, r.submitted
-       from (${rowSource(mode, "narrow")}) r ${where} ${orderClause(mode, sort)}
+       from (${rowSource(mode, "narrow", q.filters.seed !== null)}) r ${where} ${orderClause(mode, sort)}
       limit ${limit} offset ${offset}`,
     p.values,
   );
@@ -324,7 +336,7 @@ export async function getMatchingKeys(
   // Same formula as resultRowKey(): position when there is one, else text.
   const rows = await query<{ key: string }>(
     `select case when r.position is not null then 'p' || r.position else 'k' || r.submitted end as key
-       from (${rowSource(mode, "narrow")}) r ${where} ${orderClause(mode, sort ?? defaultSort(mode))}`,
+       from (${rowSource(mode, "narrow", filters.seed !== null)}) r ${where} ${orderClause(mode, sort ?? defaultSort(mode))}`,
     p.values,
   );
   return rows.map((r) => r.key);

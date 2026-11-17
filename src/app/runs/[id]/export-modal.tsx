@@ -11,6 +11,7 @@ import type { DedupMode } from "@/lib/types";
 const COLUMNS = [
   { key: "submitted", label: "Keyword" },
   { key: "canonical", label: "Canonical keyword" },
+  { key: "seed", label: "Seed" },
   { key: "lowTop", label: "Low top-of-page (₹)" },
   { key: "highTop", label: "High top-of-page (₹)" },
   { key: "avgCpc", label: "Avg CPC (₹, info)" },
@@ -29,9 +30,12 @@ export function ExportModal({
   mode,
   hasUpload,
   hasUrls,
+  hasSeeds = false,
   onClose,
   selection,
 }: {
+  /** A discovery: offers the Seed column, ticked by default. */
+  hasSeeds?: boolean;
   runId: string;
   mode: DedupMode;
   hasUpload: boolean;
@@ -41,7 +45,7 @@ export function ExportModal({
   /** Row keys to export. Undefined exports every row. */
   selection?: string[];
 }) {
-  const [selected, setSelected] = useState<string[]>(DEFAULTS);
+  const [selected, setSelected] = useState<string[]>(hasSeeds ? ["submitted", "seed", ...DEFAULTS.slice(1)] : DEFAULTS);
   const [format, setFormat] = useState<"csv" | "xlsx">("xlsx");
   const [downloading, setDownloading] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -131,7 +135,7 @@ export function ExportModal({
           <fieldset>
             <legend className="text-xs font-medium text-text-secondary">Columns</legend>
             <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-              {COLUMNS.filter((c) => c.key !== "url" || hasUrls).map((c) => (
+              {COLUMNS.filter((c) => (c.key !== "url" || hasUrls) && (c.key !== "seed" || hasSeeds)).map((c) => (
                 <label
                   key={c.key}
                   className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-control)] px-2 py-1.5 text-sm text-text hover:bg-subtle"

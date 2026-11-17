@@ -60,6 +60,8 @@ import { Histogram, HeatLegend } from "./histogram";
 import { Sparkline } from "./sparkline";
 import { ExportModal } from "./export-modal";
 import { useStoredColumns } from "@/lib/use-stored-columns";
+import { seedLabel } from "@/lib/discover-seeds";
+import { SeedsSummary, type RunSeedInfo } from "./seeds-summary";
 import { resultRowKey } from "@/lib/row-key";
 
 /**
@@ -124,7 +126,10 @@ export function ResultsView({
   hasUpload,
   hasDeltas,
   hasUrls,
+  seeds = [],
 }: {
+  /** A discovery's seeds and what each returned. Empty for any other run. */
+  seeds?: RunSeedInfo[];
   runId: string;
   /** The run's network; country breakdowns ask Google with the same one. */
   network: RunSettings["network"];
@@ -158,6 +163,10 @@ export function ResultsView({
   const [geoNonce, setGeoNonce] = useState(0);
   const geoJobs = useGeoJobs(geoNonce);
   const [hideNoData, setHideNoData] = useState(false);
+  /** Seed whose rows are shown (a discovery), or null for every seed. */
+  const [seed, setSeed] = useState<number | null>(null);
+  const hasSeeds = seeds.length > 0;
+  const seedNames = useMemo(() => new Map(seeds.map((s) => [s.position, seedLabel(s)])), [seeds]);
   const [bucket, setBucket] = useState<{ from: number; to: number } | null>(null);
   const [storedColumns, storeColumns] = useStoredColumns();
 
@@ -183,8 +192,9 @@ export function ResultsView({
       minVolume: minVol === null || Number.isNaN(minVol) ? null : minVol,
       competition,
       hideNoData,
+      seed,
     }),
-    [text, minTop, maxTop, bucket, minVol, competition, hideNoData],
+    [text, minTop, maxTop, bucket, minVol, competition, hideNoData, seed],
   );
 
   // --- the query actually sent ------------------------------------------------
@@ -474,6 +484,7 @@ export function ResultsView({
     setMinVolume("");
     setCompetition(null);
     setBucket(null);
+    setSeed(null);
   }
 
   // --- paging -----------------------------------------------------------------------
@@ -512,11 +523,14 @@ export function ResultsView({
       label: `Top-of-page ${formatMicros(bucket.from)} – ${formatMicros(bucket.to)}`,
       onRemove: () => setBucket(null),
     });
+  if (seed !== null)
+    chips.push({ key: "seed", label: `Seed: ${seedNames.get(seed) ?? seed + 1}`, onRemove: () => setSeed(null) });
   if (hideNoData) chips.push({ key: "nodata", label: "No-data rows hidden", onRemove: () => setHideNoData(false) });
 
   /** Columns currently drawn — the skeleton rows span exactly these. */
   const columnCount =
     2 +
+    (hasSeeds ? 1 : 0) +
     (hasUrls && show("url") ? 1 : 0) +
     (show("lowTop") ? 1 : 0) +
     (show("highTop") ? 1 : 0) +
@@ -570,6 +584,8 @@ export function ResultsView({
         </dl>
       </div>
 
+      {hasSeeds && <SeedsSummary seeds={seeds} active={seed} onPick={setSeed} />}
+
       {/* Filters */}
       <Card className="p-4">
         <div className="flex flex-wrap items-end gap-3">
@@ -621,6 +637,29 @@ export function ResultsView({
               <option value="HIGH">High</option>
             </select>
           </div>
+
+          {hasSeeds && (
+            <div>
+              <label htmlFor="seed-filter" className="mb-1.5 block text-xs font-medium text-text-secondary">
+                Seed
+              </label>
+              <select
+                id="seed-filter"
+                className={`${CONTROL} max-w-[220px]`}
+                value={seed === null ? "" : String(seed)}
+                onChange={(e) => setSeed(e.target.value === "" ? null : Number(e.target.value))}
+              >
+                <option value="">All seeds</option>
+                {seeds
+                  .filter((s) => s.status === "done")
+                  .map((s) => (
+                    <option key={s.position} value={s.position}>
+                      {seedLabel(s)} ({formatInt(s.ideasKept)})
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="mb-1.5 block text-xs font-medium text-text-secondary">Heat bands ₹</label>
@@ -856,6 +895,7 @@ export function ResultsView({
                   <Th sortState={ariaSort(keywordSortKey)} onClick={() => cycleSort(keywordSortKey)}>
                     Keyword
                   </Th>
+                  {hasSeeds && <Th>Seed</Th>}
                   {hasUrls && show("url") && <Th>URL</Th>}
                   {show("lowTop") && (
                     <Th numeric sortState={ariaSort("lowTop")} onClick={() => cycleSort("lowTop")}>
@@ -958,6 +998,13 @@ export function ResultsView({
                               </span>
                             )}
                           </td>
+                          {hasSeeds && (
+                            <td className="px-4 py-2.5 text-xs text-text-secondary">
+                              <span className="block max-w-[200px] truncate" title={r.seed === null ? undefined : seedNames.get(r.seed)}>
+                                {r.seed === null ? "—" : (seedNames.get(r.seed) ?? "—")}
+                              </span>
+                            </td>
+                          )}
                           {hasUrls && show("url") && (
                             <td className="px-4 py-2.5">
                               <UrlCell urls={r.urls} />
@@ -1122,6 +1169,7 @@ export function ResultsView({
           mode={mode}
           hasUpload={hasUpload}
           hasUrls={hasUrls}
+          hasSeeds={hasSeeds}
           selection={exportSelectionOnly ? [...selectedKeys] : undefined}
           onClose={() => setExporting(false)}
         />

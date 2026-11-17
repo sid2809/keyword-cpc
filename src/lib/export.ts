@@ -24,6 +24,8 @@ import type { DedupMode, ResultRow } from "./types";
 export const EXPORT_COLUMNS = [
   { key: "submitted", label: "Keyword" },
   { key: "canonical", label: "Canonical keyword" },
+  // Discoveries only: which seed produced the row. Blank on any other run.
+  { key: "seed", label: "Seed" },
   // The top-of-page band is the primary metric (VERIFIED.md §7); avg CPC
   // follows it as secondary information.
   { key: "lowTop", label: "Low top-of-page (₹)" },
@@ -50,8 +52,10 @@ export const DEFAULT_EXPORT_COLUMNS: ExportColumnKey[] = [
 
 type Cell = string | number | null;
 
-function valueFor(row: ResultRow, key: ExportColumnKey): Cell {
+function valueFor(row: ResultRow, key: ExportColumnKey, seedLabels?: ReadonlyMap<number, string>): Cell {
   switch (key) {
+    case "seed":
+      return row.seed === null ? null : (seedLabels?.get(row.seed) ?? null);
     case "submitted":
       return row.submitted;
     case "canonical":
@@ -116,10 +120,12 @@ export async function buildExportGrid(
    * intact-mode export still matches the user's original sheet.
    */
   selection?: string[],
+  /** Seed position → what the user entered, for the Seed column of a discovery. */
+  seedLabels?: ReadonlyMap<number, string>,
 ): Promise<ExportGrid> {
   const selected = columns.length > 0 ? columns : DEFAULT_EXPORT_COLUMNS;
   const metricColumns = EXPORT_COLUMNS.filter((c) => selected.includes(c.key));
-  const metricCells = (row: ResultRow) => metricColumns.map((c) => valueFor(row, c.key));
+  const metricCells = (row: ResultRow) => metricColumns.map((c) => valueFor(row, c.key, seedLabels));
 
   const batches = iterateResultRows(runId, mode, selection && selection.length > 0 ? selection : undefined);
   // The header depends on whether there are any rows (as it always did), so

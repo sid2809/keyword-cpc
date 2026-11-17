@@ -36,6 +36,8 @@ export type ResultRow = {
   submitted: string;
   canonical: string | null;
   position: number | null;
+  /** Discoveries: position of the seed that produced this row (run_seeds). Otherwise null. */
+  seed: number | null;
   averageCpcMicros: number | null;
   avgMonthlySearches: number | null;
   competition: string | null;
