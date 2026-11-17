@@ -146,6 +146,15 @@ export async function executeRun(
   if (run.status === "done") return run;
   if (run.status === "canceled") return run;
 
+  // A discovery that still has seeds to ask is a different job: one ideas
+  // request per seed (discover.ts). Once its ideas are stored it is an ordinary
+  // run, so a later refresh takes the normal path below. Imported lazily
+  // because discover.ts imports this module.
+  if (run.source === "discover") {
+    const { discoveryIsIncomplete, executeDiscovery } = await import("./discover");
+    if (await discoveryIsIncomplete(runId)) return executeDiscovery(runId);
+  }
+
   const settings = withDefaults(run.settings);
   const hash = settingsHash(settings);
 

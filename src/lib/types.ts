@@ -28,7 +28,8 @@ export type RunSettings = {
 };
 
 export type RunStatus = "queued" | "running" | "done" | "failed" | "canceled";
-export type RunSource = "paste" | "csv" | "xlsx";
+/** "discover" = keywords Google suggested from seeds (discover.ts), not ones the user supplied. */
+export type RunSource = "paste" | "csv" | "xlsx" | "discover";
 
 export type ResultRow = {
   /** What the user typed. Equals `canonical` in deduped mode. */
