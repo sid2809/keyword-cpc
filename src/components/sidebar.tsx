@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore, ViewTransition } from "react";
-import { ChartNoAxesColumn, FolderKanban, GitCompareArrows, History, LogOut, PanelLeftClose, PanelLeftOpen, Search, Settings, type LucideIcon } from "lucide-react";
+import { ChartNoAxesColumn, FolderKanban, GitCompareArrows, History, Lightbulb, LogOut, PanelLeftClose, PanelLeftOpen, Search, Settings, type LucideIcon } from "lucide-react";
 import { logout } from "@/app/login/actions";
 
 /**
@@ -22,6 +22,7 @@ import { logout } from "@/app/login/actions";
 
 const NAV: { href: string; label: string; icon: LucideIcon; match: (path: string) => boolean }[] = [
   { href: "/", label: "New search", icon: Search, match: (p) => p === "/" },
+  { href: "/discover", label: "Discover", icon: Lightbulb, match: (p) => p.startsWith("/discover") },
   { href: "/runs", label: "Runs", icon: History, match: (p) => p === "/runs" || p.startsWith("/runs/") },
   { href: "/projects", label: "Projects", icon: FolderKanban, match: (p) => p.startsWith("/projects") },
   { href: "/compare", label: "Compare", icon: GitCompareArrows, match: (p) => p.startsWith("/compare") },

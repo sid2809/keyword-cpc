@@ -17,11 +17,14 @@ export function FailedRun({
   processed,
   total,
   error,
+  unit = "keywords",
 }: {
   runId: string;
   processed: number;
   total: number;
   error: string | null;
+  /** What the count is of. A discovery still asking Google counts seeds. */
+  unit?: "keywords" | "seeds";
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -35,8 +38,8 @@ export function FailedRun({
       </div>
       <div className="p-6">
         <p className="text-sm text-text-secondary">
-          It got through {formatInt(processed)} of {formatInt(total)} keywords. Nothing is lost —
-          resuming continues from that point rather than starting over, and the keywords already
+          It got through {formatInt(processed)} of {formatInt(total)} {unit}. Nothing is lost —
+          resuming continues from that point rather than starting over, and the {unit} already
           fetched are not charged against your quota again.
         </p>
 

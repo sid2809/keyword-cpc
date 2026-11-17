@@ -16,10 +16,13 @@ export function LiveProgress({
   runId,
   initialProcessed,
   total,
+  unit = "keywords",
 }: {
   runId: string;
   initialProcessed: number;
   total: number;
+  /** What the count is of. A discovery still asking Google counts seeds. */
+  unit?: "keywords" | "seeds";
 }) {
   const router = useRouter();
   const [processed, setProcessed] = useState(initialProcessed);
@@ -62,19 +65,21 @@ export function LiveProgress({
       <Card className="p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-semibold text-text">
-            {status === "queued" ? "Queued…" : "Fetching keyword data…"}
+            {status === "queued" ? "Queued…" : unit === "seeds" ? "Asking Google for keyword ideas…" : "Fetching keyword data…"}
           </h2>
           <span className="num text-sm font-medium text-text">{pct}%</span>
         </div>
         <p className="num mt-1 text-sm text-text-secondary">
-          {formatInt(processed)} of {formatInt(total)} keywords
+          {formatInt(processed)} of {formatInt(total)} {unit}
         </p>
         <div className="mt-4">
           <ProgressBar value={processed} max={total} />
         </div>
         <p className="mt-3 text-xs text-text-muted">
-          Google allows one request per second, so large lists take a little while. You can leave this
-          page — the run continues, and it survives a server restart.
+          {unit === "seeds"
+            ? "Each seed is asked separately, a few seconds apiece."
+            : "Google allows one request per second, so large lists take a little while."}{" "}
+          You can leave this page — the run continues, and it survives a server restart.
         </p>
       </Card>
 

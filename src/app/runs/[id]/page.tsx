@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { getSession } from "@/lib/session";
 import { getRun } from "@/lib/runner";
+import { discoveryIsIncomplete } from "@/lib/discover";
 import { isRunId } from "@/lib/compare";
 import { getRunSummary } from "@/lib/results";
 import { getResultsOverview, getResultsPage } from "@/lib/results-table";
@@ -28,6 +29,9 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
 
   const settings = withDefaults(run.settings);
   const finished = run.status === "done";
+  // A discovery that is still asking Google counts its progress in seeds.
+  const unit =
+    !finished && run.source === "discover" && (await discoveryIsIncomplete(run.id)) ? "seeds" : "keywords";
 
   /*
    * Only the FIRST PAGE of rows is rendered here; the table fetches further
@@ -105,9 +109,10 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
             processed={run.processed}
             total={run.total_keywords}
             error={run.error}
+            unit={unit}
           />
         ) : (
-          <LiveProgress runId={run.id} initialProcessed={run.processed} total={run.total_keywords} />
+          <LiveProgress runId={run.id} initialProcessed={run.processed} total={run.total_keywords} unit={unit} />
         )}
       </main>
     </AppShell>

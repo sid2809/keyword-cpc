@@ -2,7 +2,8 @@ import "server-only";
 import { getPool, query } from "./db";
 import { generateKeywordIdeas, GoogleAdsError, type IdeaSeed, type KeywordIdea, type KeywordIdeasResult } from "./google-ads";
 import { isRunId } from "./ids";
-import { chunk, tidy, normalizeSubmitted } from "./keywords";
+import { buildSeed, MAX_IDEA_LIMIT, MAX_SEEDS, seedKey, seedLabel, type SeedInput, type SeedKind } from "./discover-seeds";
+import { chunk, tidy } from "./keywords";
 import { withDefaults } from "./run-settings";
 import { getRun, type RunRow } from "./runner";
 import type { RunSettings } from "./types";
@@ -20,9 +21,8 @@ import type { RunSettings } from "./types";
  * Always asks Google: ideas are not read from or written to metrics_cache.
  */
 
-export type SeedKind = IdeaSeed["kind"];
-
-export type SeedInput = { kind: SeedKind; keyword: string | null; target: string | null };
+export type { SeedInput, SeedKind };
+export { MAX_IDEA_LIMIT, MAX_SEEDS };
 
 export type RunSeed = SeedInput & {
   position: number;
@@ -35,43 +35,14 @@ export type RunSeed = SeedInput & {
 
 export class DiscoverError extends Error {}
 
-/** Each seed costs at least one request at 1 per second; this keeps a discovery to minutes. */
-export const MAX_SEEDS = 500;
-export const MAX_IDEA_LIMIT = 1_000_000;
-const MAX_KEYWORD_CHARS = 500;
-const MAX_URL_CHARS = 2_000;
 /** Seed n owns positions n*SPAN .. n*SPAN+SPAN-1, so rows stay in seed order and a seed can be rewritten alone. */
 const POSITION_SPAN = 1_000_000;
 
 // --- input ------------------------------------------------------------------
 
-function cleanUrl(raw: unknown): string | null {
-  const text = tidy(typeof raw === "string" ? raw : "");
-  if (text === "" || text.length > MAX_URL_CHARS) return null;
-  try {
-    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    if (!url.hostname.includes(".")) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
-/** A site seed is a bare host ("www.example.com"); scheme, path and port are dropped. */
-function cleanSite(raw: unknown): string | null {
-  const url = cleanUrl(raw);
-  return url ? new URL(url).hostname.toLowerCase() : null;
-}
-
-function cleanKeyword(raw: unknown): string | null {
-  const text = normalizeSubmitted(typeof raw === "string" ? raw : "").slice(0, MAX_KEYWORD_CHARS);
-  return text === "" ? null : text;
-}
-
 /**
  * Validates seeds from a request body. Throws DiscoverError naming the first
- * unusable line (1-based), so nothing is silently dropped. Exact repeats are
+ * unusable seed (1-based), so nothing is silently dropped. Exact repeats are
  * removed: asking the same thing twice would only spend a request.
  */
 export function parseSeeds(raw: unknown): SeedInput[] {
@@ -80,40 +51,10 @@ export function parseSeeds(raw: unknown): SeedInput[] {
   const seen = new Set<string>();
 
   raw.forEach((item, i) => {
-    const line = `Seed ${i + 1}`;
     const o = (typeof item === "object" && item !== null ? item : {}) as Record<string, unknown>;
-    let seed: SeedInput;
-    switch (o.kind) {
-      case "keyword": {
-        const keyword = cleanKeyword(o.keyword);
-        if (!keyword) throw new DiscoverError(`${line}: the keyword is empty.`);
-        seed = { kind: "keyword", keyword, target: null };
-        break;
-      }
-      case "url": {
-        const target = cleanUrl(o.target);
-        if (!target) throw new DiscoverError(`${line}: that is not a usable page URL.`);
-        seed = { kind: "url", keyword: null, target };
-        break;
-      }
-      case "keyword_url": {
-        const keyword = cleanKeyword(o.keyword);
-        const target = cleanUrl(o.target);
-        if (!keyword) throw new DiscoverError(`${line}: the keyword is empty.`);
-        if (!target) throw new DiscoverError(`${line}: that is not a usable page URL.`);
-        seed = { kind: "keyword_url", keyword, target };
-        break;
-      }
-      case "site": {
-        const target = cleanSite(o.target);
-        if (!target) throw new DiscoverError(`${line}: that is not a usable website.`);
-        seed = { kind: "site", keyword: null, target };
-        break;
-      }
-      default:
-        throw new DiscoverError(`${line}: unknown seed type.`);
-    }
-    const key = `${seed.kind}|${seed.keyword?.toLowerCase() ?? ""}|${seed.target ?? ""}`;
+    const seed = buildSeed(o.kind, o.keyword, o.target);
+    if ("error" in seed) throw new DiscoverError(`Seed ${i + 1}: ${seed.error}`);
+    const key = seedKey(seed);
     if (seen.has(key)) return;
     seen.add(key);
     out.push(seed);
@@ -150,6 +91,13 @@ function toIdeaSeed(s: SeedInput): IdeaSeed {
 
 // --- create -----------------------------------------------------------------
 
+/** "Discover: running shoes" / "Discover: running shoes +3", so the Runs list says what was asked. */
+function defaultName(seeds: SeedInput[]): string {
+  const first = seedLabel(seeds[0]);
+  const head = first.length > 60 ? `${first.slice(0, 59)}…` : first;
+  return seeds.length === 1 ? `Discover: ${head}` : `Discover: ${head} +${seeds.length - 1}`;
+}
+
 export async function createDiscovery(input: {
   seeds: SeedInput[];
   settings?: Partial<RunSettings>;
@@ -168,7 +116,7 @@ export async function createDiscovery(input: {
     const { rows } = await client.query<{ id: string }>(
       `insert into runs (name, tag, source, settings, status, total_keywords, idea_limit)
        values ($1, $2, 'discover', $3, 'queued', $4, $5) returning id`,
-      [input.name ?? null, input.tag ?? null, JSON.stringify(settings), input.seeds.length, input.limit ?? null],
+      [input.name ?? defaultName(input.seeds), input.tag ?? null, JSON.stringify(settings), input.seeds.length, input.limit ?? null],
     );
     const runId = rows[0].id;
     const values: unknown[] = [];

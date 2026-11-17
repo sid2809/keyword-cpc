@@ -29,7 +29,16 @@ export function SettingsPanel({
   onNameChange,
   tag,
   onTagChange,
+  note = "Defaults are set for US / English search. Ignore this panel if that suits.",
+  duplicatesSlot,
 }: {
+  /** Line beside the "Settings" heading. */
+  note?: string;
+  /**
+   * Shown in place of the Duplicates control, for a screen where that choice
+   * does not apply (Discover always keeps the list intact).
+   */
+  duplicatesSlot?: ReactNode;
   settings: RunSettings;
   onChange: (next: RunSettings) => void;
   name: string;
@@ -41,9 +50,7 @@ export function SettingsPanel({
     <div className={`${CARD} p-5`}>
       <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-4">
         <h2 className="text-sm font-semibold text-text">Settings</h2>
-        <p className="text-xs text-text-muted">
-          Defaults are set for US / English search. Ignore this panel if that suits.
-        </p>
+        <p className="text-xs text-text-muted">{note}</p>
       </div>
 
       <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -98,26 +105,28 @@ export function SettingsPanel({
           />
         </Field>
 
-        <div className="sm:col-span-2">
-          <Field
-            label="Duplicates"
-            hint={
-              settings.dedupMode === "intact"
-                ? "Every row you submitted comes back, in order, with metrics merged in."
-                : "One row per keyword after Google collapses near-duplicates."
-            }
-          >
-            <SegmentedControl
-              name="Duplicates"
-              value={settings.dedupMode}
-              onChange={(v) => onChange({ ...settings, dedupMode: v as RunSettings["dedupMode"] })}
-              options={[
-                { value: "intact", label: "Keep my list intact" },
-                { value: "deduped", label: "Deduped only" },
-              ]}
-            />
-          </Field>
-        </div>
+        {duplicatesSlot ?? (
+          <div className="sm:col-span-2">
+            <Field
+              label="Duplicates"
+              hint={
+                settings.dedupMode === "intact"
+                  ? "Every row you submitted comes back, in order, with metrics merged in."
+                  : "One row per keyword after Google collapses near-duplicates."
+              }
+            >
+              <SegmentedControl
+                name="Duplicates"
+                value={settings.dedupMode}
+                onChange={(v) => onChange({ ...settings, dedupMode: v as RunSettings["dedupMode"] })}
+                options={[
+                  { value: "intact", label: "Keep my list intact" },
+                  { value: "deduped", label: "Deduped only" },
+                ]}
+              />
+            </Field>
+          </div>
+        )}
 
         <Field label="Run name" htmlFor="run-name">
           <input
