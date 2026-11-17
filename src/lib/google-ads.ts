@@ -6,7 +6,7 @@ import type { MonthlyVolume, RunSettings } from "./types";
 export type { MonthlyVolume };
 
 /**
- * Minimal Google Ads REST client — just the two calls this tool makes.
+ * Minimal Google Ads REST client — just the calls this tool makes.
  *
  * Direct REST rather than a client library, decided at VERIFY 4 (see
  * VERIFIED.md §4): the app touches one endpoint, and the Opteo package lags the
@@ -70,6 +70,10 @@ type RawMetrics = {
 };
 type RawResult = { text?: string; closeVariants?: string[]; keywordMetrics?: RawMetrics };
 type RawResponse = { results?: RawResult[] };
+
+/** generateKeywordIdeas reply, as observed on the live API (VERIFIED.md §9). */
+type RawIdea = { text?: string; keywordIdeaMetrics?: RawMetrics };
+type RawIdeasResponse = { results?: RawIdea[]; totalSize?: string; nextPageToken?: string };
 
 const MONTH_NAMES = [
   "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
@@ -328,36 +332,158 @@ export async function generateKeywordHistoricalMetrics(
   return (json.results ?? []).map(toResult);
 }
 
+function toMetrics(m: RawMetrics): KeywordMetrics {
+  return {
+    averageCpcMicros: num(m.averageCpcMicros),
+    avgMonthlySearches: num(m.avgMonthlySearches),
+    competition: m.competition ?? null,
+    competitionIndex: num(m.competitionIndex),
+    lowTopOfPageBidMicros: num(m.lowTopOfPageBidMicros),
+    highTopOfPageBidMicros: num(m.highTopOfPageBidMicros),
+    monthlyVolumes: (m.monthlySearchVolumes ?? [])
+      .map((v) => ({
+        year: Number(v.year),
+        month: MONTH_NAMES.indexOf(v.month ?? "") + 1,
+        searches: Number(v.monthlySearches ?? 0),
+      }))
+      .filter((v) => Number.isFinite(v.year) && v.month >= 1)
+      // The API returns these in order, but the series is the one thing that
+      // moves between calls, so sort defensively.
+      .sort((a, b) => a.year - b.year || a.month - b.month),
+  };
+}
+
 function toResult(raw: RawResult): HistoricalResult {
   const m = raw.keywordMetrics;
   // No `keywordMetrics` key at all is the no-data signal (VERIFIED.md §2).
   if (!m) {
     return { text: raw.text ?? "", closeVariants: raw.closeVariants ?? [], noData: true, metrics: null };
   }
+  return { text: raw.text ?? "", closeVariants: raw.closeVariants ?? [], noData: false, metrics: toMetrics(m) };
+}
 
-  return {
-    text: raw.text ?? "",
-    closeVariants: raw.closeVariants ?? [],
-    noData: false,
-    metrics: {
-      averageCpcMicros: num(m.averageCpcMicros),
-      avgMonthlySearches: num(m.avgMonthlySearches),
-      competition: m.competition ?? null,
-      competitionIndex: num(m.competitionIndex),
-      lowTopOfPageBidMicros: num(m.lowTopOfPageBidMicros),
-      highTopOfPageBidMicros: num(m.highTopOfPageBidMicros),
-      monthlyVolumes: (m.monthlySearchVolumes ?? [])
-        .map((v) => ({
-          year: Number(v.year),
-          month: MONTH_NAMES.indexOf(v.month ?? "") + 1,
-          searches: Number(v.monthlySearches ?? 0),
-        }))
-        .filter((v) => Number.isFinite(v.year) && v.month >= 1)
-        // The API returns these in order, but the series is the one thing that
-        // moves between calls, so sort defensively.
-        .sort((a, b) => a.year - b.year || a.month - b.month),
+// --- keyword ideas (Discover) -----------------------------------------------
+
+/** What to generate ideas from. One seed per request keeps each seed's ideas separate. */
+export type IdeaSeed =
+  | { kind: "keyword"; keyword: string }
+  | { kind: "url"; url: string }
+  | { kind: "keyword_url"; keyword: string; url: string }
+  | { kind: "site"; site: string };
+
+export type KeywordIdea = {
+  text: string;
+  /** True when the idea came back without a metrics object. */
+  noData: boolean;
+  metrics: KeywordMetrics | null;
+};
+
+export type KeywordIdeasResult = {
+  ideas: KeywordIdea[];
+  /** Google's count of ideas available for this seed; null if it sent none. */
+  totalSize: number | null;
+  /** True when a limit stopped the fetch before Google ran out of ideas. */
+  truncated: boolean;
+  /** Requests made (one per page). */
+  requests: number;
+};
+
+/** Google returns at most this many ideas per page. */
+export const MAX_IDEAS_PER_PAGE = 10_000;
+/** Backstop against a paging loop that never ends (1,000,000 ideas). */
+const MAX_IDEA_PAGES = 100;
+
+function seedField(seed: IdeaSeed): Record<string, unknown> {
+  switch (seed.kind) {
+    case "keyword":
+      return { keywordSeed: { keywords: [seed.keyword] } };
+    case "url":
+      return { urlSeed: { url: seed.url } };
+    case "keyword_url":
+      return { keywordAndUrlSeed: { keywords: [seed.keyword], url: seed.url } };
+    case "site":
+      return { siteSeed: { site: seed.site } };
+  }
+}
+
+/**
+ * Keyword ideas for ONE seed, with their metrics. Follows nextPageToken until
+ * Google has no more pages or `limit` ideas have been collected.
+ *
+ * Observed on the live API (VERIFIED.md §9): a result has `text`,
+ * `keywordIdeaMetrics` and an empty `keywordAnnotations`; there is no
+ * closeVariants list and nothing that names the seed; numbers arrive as strings;
+ * the bid fields can be missing; `nextPageToken` is absent on the last page.
+ */
+export async function generateKeywordIdeas(
+  seed: IdeaSeed,
+  settings: RunSettings,
+  opts: { limit?: number } = {},
+): Promise<KeywordIdeasResult> {
+  const limit = opts.limit;
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+    throw new GoogleAdsError(`Idea limit must be a whole number of at least 1 (got ${limit}).`, { retryable: false });
+  }
+
+  const range = yearMonthRange(settings.monthsBack);
+  const base: Record<string, unknown> = {
+    ...seedField(seed),
+    keywordPlanNetwork: settings.network,
+    includeAdultKeywords: settings.includeAdultKeywords,
+    historicalMetricsOptions: {
+      includeAverageCpc: true,
+      yearMonthRange: {
+        start: { year: range.start.year, month: MONTH_NAMES[range.start.month - 1] },
+        end: { year: range.end.year, month: MONTH_NAMES[range.end.month - 1] },
+      },
     },
   };
+  if (settings.language) base.language = settings.language;
+  if (settings.geoTargetConstants.length > 0) base.geoTargetConstants = settings.geoTargetConstants;
+
+  const ideas: KeywordIdea[] = [];
+  let totalSize: number | null = null;
+  let pageToken: string | undefined;
+  let requests = 0;
+  let moreAvailable = false;
+
+  for (;;) {
+    const remaining = limit === undefined ? MAX_IDEAS_PER_PAGE : limit - ideas.length;
+    // Every field except pageToken must stay identical across pages, so the
+    // page size is fixed for the whole fetch and any surplus is cut afterwards.
+    const body: Record<string, unknown> = {
+      ...base,
+      pageSize: limit === undefined ? MAX_IDEAS_PER_PAGE : Math.min(MAX_IDEAS_PER_PAGE, limit),
+    };
+    if (pageToken) body.pageToken = pageToken;
+
+    const json = await post<RawIdeasResponse>(`customers/${env.googleAds.customerId}:generateKeywordIdeas`, body);
+    requests++;
+    if (totalSize === null) totalSize = num(json.totalSize);
+
+    const page = json.results ?? [];
+    for (const raw of page.slice(0, remaining)) {
+      const m = raw.keywordIdeaMetrics;
+      ideas.push({ text: raw.text ?? "", noData: !m, metrics: m ? toMetrics(m) : null });
+    }
+
+    const next = json.nextPageToken || undefined;
+    const full = limit !== undefined && ideas.length >= limit;
+    if (full) {
+      moreAvailable = Boolean(next) || page.length > remaining;
+      break;
+    }
+    if (!next) break;
+    if (next === pageToken || requests >= MAX_IDEA_PAGES) {
+      throw new GoogleAdsError(
+        `Keyword ideas paging did not finish after ${requests} pages (${ideas.length} ideas).`,
+        { retryable: false },
+      );
+    }
+    pageToken = next;
+  }
+
+  return { ideas, totalSize, truncated: moreAvailable, requests };
 }
 
 /** Account metadata, for the Settings-screen connection test. */

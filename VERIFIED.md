@@ -364,3 +364,39 @@ contested a keyword is.
 `year_month_range` in exactly the same way avg CPC is (§3), so switching the
 primary metric does **not** buy any time-sensitivity. Date-range presets still
 affect the volume series only.
+
+---
+
+## 9. `generateKeywordIdeas` (Discover) — ✅ probed live (2026-11-17)
+
+Run with `scripts/probe-keyword-ideas.ts` on the owner's machine: 8 requests,
+US + English + GOOGLE_SEARCH unless noted, `includeAverageCpc: true`, no
+explicit `yearMonthRange`. All returned HTTP 200.
+
+| Request | Ideas (`totalSize`) | Time |
+|---|---|---|
+| `keywordSeed` ["running shoes"], no `pageSize` | 2,768, all in one reply, no `nextPageToken` | 4.6 s |
+| same, `pageSize` 50 | 50 + `nextPageToken`; page 2 continues with different ideas | 1.2 s / 0.6 s |
+| `keywordSeed` ["running shoes", "garden hose"] | 4,222 | 2.3 s |
+| `urlSeed` (one Wikipedia article) | 762 | 3.4 s |
+| `keywordAndUrlSeed` (same keyword + article) | 418 | 4.1 s |
+| `siteSeed` wikipedia.org | 903 (unrelated topics: the site is too broad) | 5.7 s |
+| `keywordSeed`, no `language`, no `geoTargetConstants` | 2,919 | 3.4 s |
+
+Reply shape, from the 40 results kept in the transcript (first 5 per reply):
+
+- Top level: `results`, `totalSize` (string), `nextPageToken` (absent on the last page).
+- Each result has exactly `text`, `keywordIdeaMetrics`, `keywordAnnotations` (always `{}`).
+  **No `closeVariants`, and nothing naming the seed** — with two seeds in one
+  request the ideas cannot be attributed, so Discover sends one request per seed.
+- `keywordIdeaMetrics` has the same fields as `keywordMetrics` on historical
+  metrics; every number is a string.
+- `lowTopOfPageBidMicros` / `highTopOfPageBidMicros` can be absent while
+  `averageCpcMicros` is present (seen on a 20-searches/month idea).
+- The seed keyword itself is returned as the first idea.
+
+**Not observed, so handled defensively and still unverified:** the reply for a
+seed with zero ideas; an idea with no `keywordIdeaMetrics` object; the effect of
+an explicit `yearMonthRange` on this method (the app sends one, as it does for
+historical metrics); the rate limit for this method (the app uses the same
+1 request/second gate as the other planning call).
